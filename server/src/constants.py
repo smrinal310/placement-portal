@@ -14,6 +14,7 @@ class DriveStatus:
     PENDING = "pending"
     APPROVED = "approved"
     CLOSED = "closed"
+    REJECTED = "rejected"
 
 
 class ApplicationStatus:

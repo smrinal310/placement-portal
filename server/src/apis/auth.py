@@ -108,7 +108,7 @@ def login():
     if not user or not user.check_password(data["password"]):
         return jsonify({"message": "Invalid credentials"}), 401
 
-    if user.account_status != AccountStatus.BLACKLISTED:
+    if user.account_status == AccountStatus.BLACKLISTED:
         return jsonify({"message": "Account is blacklisted"}), 403
 
     additional_claims = {"role": user.role, "id": user.id}
