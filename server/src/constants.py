@@ -1,0 +1,29 @@
+class UserRole:
+    ADMIN = "admin"
+    COMPANY = "company"
+    STUDENT = "student"
+
+
+class ApprovalStatus:
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class DriveStatus:
+    PENDING = "pending"
+    APPROVED = "approved"
+    CLOSED = "closed"
+
+
+class ApplicationStatus:
+    APPLIED = "applied"
+    SHORTLISTED = "shortlisted"
+    SELECTED = "selected"
+    REJECTED = "rejected"
+
+
+class AccountStatus:
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    BLACKLISTED = "blacklisted"
