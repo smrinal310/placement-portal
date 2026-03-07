@@ -28,3 +28,8 @@ class AccountStatus:
     ACTIVE = "active"
     INACTIVE = "inactive"
     BLACKLISTED = "blacklisted"
+
+
+class LogoLimits:
+    ALLOWED_LOGO_EXTENSIONS = {"png", "jpg", "jpeg"}
+    MAX_LOGO_SIZE = 2 * 1024 * 1024

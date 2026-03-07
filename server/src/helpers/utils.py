@@ -1,6 +1,7 @@
 import os
+from datetime import UTC, datetime
 
-from ..constants import AccountStatus, UserRole
+from ..constants import AccountStatus, LogoLimits, UserRole
 from ..models import User, db
 
 
@@ -25,3 +26,20 @@ def create_admin(app):
     db.session.add(admin)
     db.session.commit()
     app.logger.info(f"Admin user created: {admin_email}")
+
+
+def allowed_file(filename):
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower()
+        in LogoLimits.ALLOWED_LOGO_EXTENSIONS
+    )
+
+
+def parse_iso_datetime(iso_str):
+    if not iso_str:
+        return None
+    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt

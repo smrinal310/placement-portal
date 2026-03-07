@@ -49,55 +49,6 @@ def register_student():
         return jsonify({"message": f"Registration failed: {str(e)}"}), 500
 
 
-@auth_bp.route("/register/company", methods=["POST"])
-def register_company():
-    data = request.get_json()
-
-    required_fields = [
-        "email",
-        "password",
-        "company_name",
-        "hr_name",
-        "hr_contact",
-    ]
-    if not all(field in data for field in required_fields):
-        return jsonify({"message": "Missing required fields"}), 400
-
-    if User.query.filter_by(email=data["email"]).first():
-        return jsonify({"message": "Email already registered"}), 409
-
-    try:
-        user = User(
-            email=data["email"],
-            role=UserRole.COMPANY,
-            account_status=AccountStatus.ACTIVE,
-        )
-        user.set_password(data["password"])
-        db.session.add(user)
-        db.session.flush()
-
-        company = Company(
-            user_id=user.id,
-            company_name=data["company_name"],
-            hr_name=data["hr_name"],
-            hr_contact=data["hr_contact"],
-            website=data.get("website"),
-            industry=data.get("industry"),
-        )
-        db.session.add(company)
-        db.session.commit()
-
-        return jsonify(
-            {
-                "message": "Company registered. Pending approval from admin.",
-                "user_id": user.id,
-            }
-        ), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": f"Registration failed: {str(e)}"}), 500
-
-
 @auth_bp.route("/login", methods=["POST"])
 def login():
     data = request.get_json()

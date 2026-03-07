@@ -3,6 +3,7 @@ from flask_jwt_extended import JWTManager
 
 from .apis.admin import admin_bp
 from .apis.auth import auth_bp
+from .apis.company import company_bp
 from .config import Config
 from .helpers.utils import create_admin
 from .models import db
@@ -17,6 +18,7 @@ def create_app():
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(company_bp)
 
     with app.app_context():
         db.create_all()
