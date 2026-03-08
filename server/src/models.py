@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 
-from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -9,6 +8,7 @@ from src.constants import (
     ApplicationStatus,
     ApprovalStatus,
     DriveStatus,
+    ExportJobStatus,
     UserRole,
 )
 
@@ -16,13 +16,15 @@ db = SQLAlchemy()
 
 
 class TimestampMixin:
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
     updated_at = db.Column(
-        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        db.DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
-class User(UserMixin, TimestampMixin, db.Model):
+class User(TimestampMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -81,7 +83,7 @@ class Student(TimestampMixin, db.Model):
     )
 
     full_name = db.Column(db.String(150), nullable=False)
-    branch = db.Column(db.String(100), nullable=False)
+    branch = db.Column(db.String(100), nullable=False, index=True)
     year = db.Column(db.Integer, nullable=False)
     cgpa = db.Column(db.Float, nullable=False, default=0.0)
     phone = db.Column(db.String(20))
@@ -124,7 +126,10 @@ class Company(TimestampMixin, db.Model):
     address = db.Column(db.Text)
 
     approval_status = db.Column(
-        db.String(20), nullable=False, default=ApprovalStatus.PENDING
+        db.String(20),
+        nullable=False,
+        default=ApprovalStatus.PENDING,
+        index=True,
     )
     rejection_reason = db.Column(db.Text)
 
@@ -167,7 +172,10 @@ class PlacementDrive(TimestampMixin, db.Model):
     result_date = db.Column(db.DateTime)
 
     status = db.Column(
-        db.String(20), nullable=False, default=DriveStatus.PENDING
+        db.String(20),
+        nullable=False,
+        default=DriveStatus.PENDING,
+        index=True,
     )
     rejection_reason = db.Column(db.Text)
     vacancy_count = db.Column(db.Integer, default=0)
@@ -184,6 +192,15 @@ class PlacementDrive(TimestampMixin, db.Model):
         )
 
 
+# Status transition order used by Application.can_transition_to
+_STATUS_ORDER: dict[str, int] = {
+    ApplicationStatus.APPLIED: 0,
+    ApplicationStatus.SHORTLISTED: 1,
+    ApplicationStatus.SELECTED: 2,
+    ApplicationStatus.REJECTED: -1,
+}
+
+
 class Application(TimestampMixin, db.Model):
     __tablename__ = "applications"
 
@@ -197,7 +214,10 @@ class Application(TimestampMixin, db.Model):
 
     applied_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
     status = db.Column(
-        db.String(20), nullable=False, default=ApplicationStatus.APPLIED
+        db.String(20),
+        nullable=False,
+        default=ApplicationStatus.APPLIED,
+        index=True,
     )
 
     interview_date = db.Column(db.DateTime)
@@ -214,8 +234,74 @@ class Application(TimestampMixin, db.Model):
     student = db.relationship("Student", back_populates="applications")
     drive = db.relationship("PlacementDrive", back_populates="applications")
 
+    def can_transition_to(self, new_status: str) -> tuple[bool, str]:
+        """Check whether a status transition is valid.
+
+        Returns (True, "") if allowed, (False, reason) otherwise.
+        """
+        if new_status == ApplicationStatus.REJECTED:
+            return True, ""
+
+        if self.status == ApplicationStatus.REJECTED:
+            return False, "Cannot change status of a rejected application"
+
+        current_level = _STATUS_ORDER.get(self.status, 0)
+        new_level = _STATUS_ORDER.get(new_status, 0)
+
+        if (
+            new_level <= current_level
+            and self.status != ApplicationStatus.APPLIED
+        ):
+            return False, "Cannot move status backward"
+
+        return True, ""
+
     def __repr__(self):
         return (
             f"<Application id={self.id} student_id={self.student_id} "
             f"drive_id={self.drive_id} status={self.status}>"
+        )
+
+
+class ExportJob(TimestampMixin, db.Model):
+    __tablename__ = "export_jobs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    student_id = db.Column(
+        db.Integer, db.ForeignKey("students.id"), nullable=True
+    )
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default=ExportJobStatus.QUEUED,
+    )
+    file_path = db.Column(db.String(500))
+    completed_at = db.Column(db.DateTime)
+
+    user = db.relationship("User")
+    student = db.relationship("Student")
+
+    def __repr__(self):
+        return (
+            f"<ExportJob id={self.id} user_id={self.user_id} "
+            f"student_id={self.student_id} status={self.status}>"
+        )
+
+
+class Notification(TimestampMixin, db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+
+    user = db.relationship("User")
+
+    def __repr__(self):
+        return (
+            f"<Notification id={self.id} user_id={self.user_id} "
+            f"title={self.title}>"
         )

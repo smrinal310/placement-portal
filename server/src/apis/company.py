@@ -1,7 +1,8 @@
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 
-from flask import Blueprint, current_app, jsonify, request, send_from_directory
+from flask import Blueprint, current_app, request, send_from_directory
+from sqlalchemy import case, func
 from werkzeug.utils import secure_filename
 
 from src.constants import (
@@ -13,7 +14,12 @@ from src.constants import (
     UserRole,
 )
 from src.helpers.auth import company_required, get_current_company
-from src.helpers.utils import allowed_file, parse_iso_datetime
+from src.helpers.utils import (
+    error_response,
+    parse_iso_datetime,
+    success_response,
+    validate_file,
+)
 from src.models import Application, Company, PlacementDrive, User, db
 
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
@@ -31,10 +37,10 @@ def register():
         "hr_contact",
     ]
     if not all(field in data for field in required_fields):
-        return jsonify({"message": "Missing required fields"}), 400
+        return error_response("Missing required fields")
 
     if User.query.filter_by(email=data["email"]).first():
-        return jsonify({"message": "Email already registered"}), 409
+        return error_response("Email already registered", 409)
 
     try:
         user = User(
@@ -58,12 +64,13 @@ def register():
         db.session.add(company)
         db.session.commit()
 
-        return jsonify(
-            {"message": "Registration successful. Awaiting admin approval."}
-        ), 201
+        return success_response(
+            "Registration successful. Awaiting admin approval.",
+            status_code=201,
+        )
     except Exception as e:
         db.session.rollback()
-        return jsonify({"message": f"Registration failed: {str(e)}"}), 500
+        return error_response(f"Registration failed: {e!s}", 500)
 
 
 @company_bp.route("/profile", methods=["GET"])
@@ -71,9 +78,10 @@ def register():
 def get_profile():
     _, company = get_current_company()
     if not company:
-        return jsonify({"message": "Company profile not found"}), 404
+        return error_response("Company profile not found", 404)
 
-    return jsonify(
+    return success_response(
+        "Profile fetched",
         {
             "id": company.id,
             "company_name": company.company_name,
@@ -85,8 +93,8 @@ def get_profile():
             "address": company.address,
             "logo_filename": company.logo_filename,
             "approval_status": company.approval_status,
-        }
-    ), 200
+        },
+    )
 
 
 @company_bp.route("/profile", methods=["PUT"])
@@ -95,9 +103,7 @@ def update_profile():
     _, company = get_current_company()
 
     if company.approval_status != ApprovalStatus.APPROVED:
-        return jsonify(
-            {"message": "Your company is pending admin approval"}
-        ), 403
+        return error_response("Your company is pending admin approval", 403)
 
     data = request.get_json()
     allowed_updates = [
@@ -112,8 +118,12 @@ def update_profile():
         if field in data:
             setattr(company, field, data[field])
 
-    db.session.commit()
-    return jsonify({"message": "Profile updated successfully"}), 200
+    try:
+        db.session.commit()
+        return success_response("Profile updated successfully")
+    except Exception:
+        db.session.rollback()
+        return error_response("Database error. Please try again.", 500)
 
 
 @company_bp.route("/profile/logo", methods=["POST"])
@@ -122,36 +132,48 @@ def upload_logo():
     _, company = get_current_company()
 
     if "logo" not in request.files:
-        return jsonify({"message": "No file part"}), 400
+        return error_response("No file part")
 
     file = request.files["logo"]
     if file.filename == "":
-        return jsonify({"message": "No selected file"}), 400
+        return error_response("No selected file")
 
-    if file and allowed_file(file.filename):
-        file.seek(0, os.SEEK_END)
-        size = file.tell()
-        file.seek(0)
-        if size > LogoLimits.MAX_LOGO_SIZE:
-            return jsonify(
-                {"message": "File exceeds maximum size of 2MB"}
-            ), 400
+    # Validate extension AND MIME type
+    ok, reason = validate_file(
+        file,
+        LogoLimits.ALLOWED_LOGO_EXTENSIONS,
+        LogoLimits.ALLOWED_LOGO_MIMETYPES,
+    )
+    if not ok:
+        return error_response(reason)
 
-        filename = secure_filename(file.filename)
-        new_filename = f"{company.id}_{filename}"
-        upload_folder = os.path.join(
-            current_app.root_path, "..", "static", "uploads", "logos"
-        )
-        os.makedirs(upload_folder, exist_ok=True)
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > LogoLimits.MAX_LOGO_SIZE:
+        return error_response("File exceeds maximum size of 2MB")
 
-        file_path = os.path.join(upload_folder, new_filename)
-        file.save(file_path)
+    filename = secure_filename(file.filename)
+    new_filename = f"{company.id}_{filename}"
+    upload_folder = os.path.join(
+        current_app.root_path,
+        "..",
+        "static",
+        "uploads",
+        "logos",
+    )
+    os.makedirs(upload_folder, exist_ok=True)
 
-        company.logo_filename = new_filename
+    file_path = os.path.join(upload_folder, new_filename)
+    file.save(file_path)
+
+    company.logo_filename = new_filename
+    try:
         db.session.commit()
-        return jsonify({"message": "Logo uploaded successfully"}), 200
-
-    return jsonify({"message": "Invalid file format"}), 400
+        return success_response("Logo uploaded successfully")
+    except Exception:
+        db.session.rollback()
+        return error_response("Database error. Please try again.", 500)
 
 
 @company_bp.route("/dashboard", methods=["GET"])
@@ -160,46 +182,67 @@ def get_dashboard():
     _, company = get_current_company()
 
     if company.approval_status != ApprovalStatus.APPROVED:
-        return jsonify(
-            {
-                "message": "Your company is pending admin approval",
-                "approval_status": company.approval_status,
-            }
-        ), 200
-
-    drives = PlacementDrive.query.filter_by(company_id=company.id).all()
-    drive_data = []
-
-    for d in drives:
-        applicant_count = Application.query.filter_by(drive_id=d.id).count()
-        shortlisted_count = Application.query.filter_by(
-            drive_id=d.id, status=ApplicationStatus.SHORTLISTED
-        ).count()
-        selected_count = Application.query.filter_by(
-            drive_id=d.id, status=ApplicationStatus.SELECTED
-        ).count()
-
-        drive_data.append(
-            {
-                "drive_id": d.id,
-                "job_title": d.job_title,
-                "status": d.status,
-                "applicant_count": applicant_count,
-                "shortlisted_count": shortlisted_count,
-                "selected_count": selected_count,
-                "deadline": d.application_deadline.isoformat()
-                if d.application_deadline
-                else None,
-            }
+        return success_response(
+            "Your company is pending admin approval",
+            {"approval_status": company.approval_status},
         )
 
-    return jsonify(
+    # Single query: count by status per drive (fixes N+1)
+    drive_stats = (
+        db.session.query(
+            PlacementDrive.id.label("drive_id"),
+            PlacementDrive.job_title,
+            PlacementDrive.status,
+            PlacementDrive.application_deadline,
+            func.count(Application.id).label("applicant_count"),
+            func.count(
+                case(
+                    (
+                        Application.status == ApplicationStatus.SHORTLISTED,
+                        1,
+                    ),
+                )
+            ).label("shortlisted_count"),
+            func.count(
+                case(
+                    (
+                        Application.status == ApplicationStatus.SELECTED,
+                        1,
+                    ),
+                )
+            ).label("selected_count"),
+        )
+        .outerjoin(Application, Application.drive_id == PlacementDrive.id)
+        .filter(PlacementDrive.company_id == company.id)
+        .group_by(PlacementDrive.id)
+        .all()
+    )
+
+    drive_data = [
+        {
+            "drive_id": row.drive_id,
+            "job_title": row.job_title,
+            "status": row.status,
+            "applicant_count": row.applicant_count,
+            "shortlisted_count": row.shortlisted_count,
+            "selected_count": row.selected_count,
+            "deadline": (
+                row.application_deadline.isoformat()
+                if row.application_deadline
+                else None
+            ),
+        }
+        for row in drive_stats
+    ]
+
+    return success_response(
+        "Dashboard fetched",
         {
             "approval_status": company.approval_status,
-            "total_drives": len(drives),
+            "total_drives": len(drive_data),
             "drives": drive_data,
-        }
-    ), 200
+        },
+    )
 
 
 @company_bp.route("/drives", methods=["POST"])
@@ -208,36 +251,34 @@ def create_drive():
     user, company = get_current_company()
 
     if company.approval_status != ApprovalStatus.APPROVED:
-        return jsonify({"message": "Company not approved"}), 403
+        return error_response("Company not approved", 403)
 
     if user.account_status == AccountStatus.BLACKLISTED:
-        return jsonify({"message": "Account blacklisted"}), 403
+        return error_response("Account blacklisted", 403)
 
     data = request.get_json()
 
     try:
         app_deadline = parse_iso_datetime(data["application_deadline"])
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         if app_deadline < now:
-            return jsonify(
-                {"message": "application_deadline must be a future datetime"}
-            ), 400
+            return error_response(
+                "application_deadline must be a future datetime"
+            )
     except (KeyError, ValueError, TypeError):
-        return jsonify(
-            {"message": "application_deadline is missing or invalid format"}
-        ), 400
+        return error_response(
+            "application_deadline is missing or invalid format"
+        )
 
     min_cgpa = float(data.get("min_cgpa", 0.0))
     if not (0.0 <= min_cgpa <= 10.0):
-        return jsonify(
-            {"message": "min_cgpa must follow between 0.0 and 10.0"}
-        ), 400
+        return error_response("min_cgpa must follow between 0.0 and 10.0")
 
     min_year = int(data.get("min_year", 1))
     max_year = int(data.get("max_year", 4))
     if min_year > max_year:
-        return jsonify({"message": "min_year must be <= max_year"}), 400
+        return error_response("min_year must be <= max_year")
 
     try:
         drive_date = parse_iso_datetime(data.get("drive_date"))
@@ -262,16 +303,18 @@ def create_drive():
         db.session.add(drive)
         db.session.commit()
 
-        return jsonify(
+        return success_response(
+            "Drive created successfully",
             {
                 "id": drive.id,
                 "job_title": drive.job_title,
                 "status": drive.status,
-            }
-        ), 201
+            },
+            201,
+        )
     except Exception as e:
         db.session.rollback()
-        return jsonify({"message": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @company_bp.route("/drives", methods=["GET"])
@@ -280,40 +323,65 @@ def get_drives():
     _, company = get_current_company()
 
     status_filter = request.args.get("status")
-    query = PlacementDrive.query.filter_by(company_id=company.id)
+
+    # Single query: count by status per drive (fixes N+1)
+    drive_stats = (
+        db.session.query(
+            PlacementDrive.id,
+            PlacementDrive.job_title,
+            PlacementDrive.status,
+            PlacementDrive.application_deadline,
+            func.count(Application.id).label("applicant_count"),
+            func.count(
+                case(
+                    (
+                        Application.status == ApplicationStatus.SHORTLISTED,
+                        1,
+                    ),
+                )
+            ).label("shortlisted_count"),
+            func.count(
+                case(
+                    (
+                        Application.status == ApplicationStatus.SELECTED,
+                        1,
+                    ),
+                )
+            ).label("selected_count"),
+        )
+        .outerjoin(Application, Application.drive_id == PlacementDrive.id)
+        .filter(PlacementDrive.company_id == company.id)
+    )
+
     if status_filter in [
         DriveStatus.PENDING,
         DriveStatus.APPROVED,
         DriveStatus.CLOSED,
     ]:
-        query = query.filter_by(status=status_filter)
-
-    drives = query.all()
-    result = []
-    for d in drives:
-        applicant_count = Application.query.filter_by(drive_id=d.id).count()
-        shortlisted_count = Application.query.filter_by(
-            drive_id=d.id, status=ApplicationStatus.SHORTLISTED
-        ).count()
-        selected_count = Application.query.filter_by(
-            drive_id=d.id, status=ApplicationStatus.SELECTED
-        ).count()
-
-        result.append(
-            {
-                "id": d.id,
-                "job_title": d.job_title,
-                "status": d.status,
-                "application_deadline": d.application_deadline.isoformat()
-                if d.application_deadline
-                else None,
-                "applicant_count": applicant_count,
-                "shortlisted_count": shortlisted_count,
-                "selected_count": selected_count,
-            }
+        drive_stats = drive_stats.filter(
+            PlacementDrive.status == status_filter
         )
 
-    return jsonify(result), 200
+    rows = drive_stats.group_by(PlacementDrive.id).all()
+
+    result = [
+        {
+            "id": row.id,
+            "job_title": row.job_title,
+            "status": row.status,
+            "application_deadline": (
+                row.application_deadline.isoformat()
+                if row.application_deadline
+                else None
+            ),
+            "applicant_count": row.applicant_count,
+            "shortlisted_count": row.shortlisted_count,
+            "selected_count": row.selected_count,
+        }
+        for row in rows
+    ]
+
+    return success_response("Drives fetched", result)
 
 
 @company_bp.route("/drives/<int:drive_id>", methods=["GET"])
@@ -323,29 +391,28 @@ def get_drive(drive_id):
     drive = db.get_or_404(PlacementDrive, drive_id)
 
     if drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     applications = Application.query.filter_by(drive_id=drive.id).all()
-    apps_data = []
+    apps_data = [
+        {
+            "application_id": app.id,
+            "student_name": app.student.full_name,
+            "roll_number": app.student.id,
+            "branch": app.student.branch,
+            "cgpa": app.student.cgpa,
+            "year": app.student.year,
+            "status": app.status,
+            "applied_at": (
+                app.applied_at.isoformat() if app.applied_at else None
+            ),
+            "resume_filename": app.student.resume_filename,
+        }
+        for app in applications
+    ]
 
-    for app in applications:
-        apps_data.append(
-            {
-                "application_id": app.id,
-                "student_name": app.student.full_name,
-                "roll_number": app.student.id,
-                "branch": app.student.branch,
-                "cgpa": app.student.cgpa,
-                "year": app.student.year,
-                "status": app.status,
-                "applied_at": app.applied_at.isoformat()
-                if app.applied_at
-                else None,
-                "resume_filename": app.student.resume_filename,
-            }
-        )
-
-    return jsonify(
+    return success_response(
+        "Drive fetched",
         {
             "id": drive.id,
             "job_title": drive.job_title,
@@ -358,17 +425,19 @@ def get_drive(drive_id):
             "min_year": drive.min_year,
             "max_year": drive.max_year,
             "other_criteria": drive.other_criteria,
-            "application_deadline": drive.application_deadline.isoformat()
-            if drive.application_deadline
-            else None,
-            "drive_date": drive.drive_date.isoformat()
-            if drive.drive_date
-            else None,
+            "application_deadline": (
+                drive.application_deadline.isoformat()
+                if drive.application_deadline
+                else None
+            ),
+            "drive_date": (
+                drive.drive_date.isoformat() if drive.drive_date else None
+            ),
             "vacancy_count": drive.vacancy_count,
             "status": drive.status,
             "applications": apps_data,
-        }
-    ), 200
+        },
+    )
 
 
 @company_bp.route("/drives/<int:drive_id>", methods=["PUT"])
@@ -378,10 +447,10 @@ def edit_drive(drive_id):
     drive = db.get_or_404(PlacementDrive, drive_id)
 
     if drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     if drive.status == DriveStatus.APPROVED:
-        return jsonify({"message": "Cannot edit an approved drive"}), 400
+        return error_response("Cannot edit an approved drive")
 
     data = request.get_json()
     allowed_updates = [
@@ -398,8 +467,12 @@ def edit_drive(drive_id):
     if "drive_date" in data and data["drive_date"]:
         drive.drive_date = parse_iso_datetime(data["drive_date"])
 
-    db.session.commit()
-    return jsonify({"message": "Drive updated successfully"}), 200
+    try:
+        db.session.commit()
+        return success_response("Drive updated successfully")
+    except Exception:
+        db.session.rollback()
+        return error_response("Database error. Please try again.", 500)
 
 
 @company_bp.route("/drives/<int:drive_id>/close", methods=["PATCH"])
@@ -409,12 +482,15 @@ def close_drive(drive_id):
     drive = db.get_or_404(PlacementDrive, drive_id)
 
     if drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     drive.status = DriveStatus.CLOSED
-    db.session.commit()
-
-    return jsonify({"message": "Drive closed successfully"}), 200
+    try:
+        db.session.commit()
+        return success_response("Drive closed successfully")
+    except Exception:
+        db.session.rollback()
+        return error_response("Database error. Please try again.", 500)
 
 
 @company_bp.route("/drives/<int:drive_id>/applications", methods=["GET"])
@@ -424,7 +500,7 @@ def get_drive_applications(drive_id):
     drive = db.get_or_404(PlacementDrive, drive_id)
 
     if drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     status_filter = request.args.get("status")
     query = Application.query.filter_by(drive_id=drive.id)
@@ -437,32 +513,31 @@ def get_drive_applications(drive_id):
         query = query.filter_by(status=status_filter)
 
     applications = query.all()
-    apps_data = []
+    apps_data = [
+        {
+            "application_id": app.id,
+            "student_name": app.student.full_name,
+            "roll_number": app.student.id,
+            "branch": app.student.branch,
+            "cgpa": app.student.cgpa,
+            "year": app.student.year,
+            "skills": app.student.skills,
+            "linkedin_url": app.student.linkedin_url,
+            "status": app.status,
+            "applied_at": (
+                app.applied_at.isoformat() if app.applied_at else None
+            ),
+            "resume_filename": app.student.resume_filename,
+        }
+        for app in applications
+    ]
 
-    for app in applications:
-        apps_data.append(
-            {
-                "application_id": app.id,
-                "student_name": app.student.full_name,
-                "roll_number": app.student.id,
-                "branch": app.student.branch,
-                "cgpa": app.student.cgpa,
-                "year": app.student.year,
-                "skills": app.student.skills,
-                "linkedin_url": app.student.linkedin_url,
-                "status": app.status,
-                "applied_at": app.applied_at.isoformat()
-                if app.applied_at
-                else None,
-                "resume_filename": app.student.resume_filename,
-            }
-        )
-
-    return jsonify(apps_data), 200
+    return success_response("Applications fetched", apps_data)
 
 
 @company_bp.route(
-    "/applications/<int:application_id>/status", methods=["PATCH"]
+    "/applications/<int:application_id>/status",
+    methods=["PATCH"],
 )
 @company_required
 def update_application_status(application_id):
@@ -470,7 +545,7 @@ def update_application_status(application_id):
     app_record = db.get_or_404(Application, application_id)
 
     if app_record.drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     data = request.get_json()
     new_status = data.get("status")
@@ -480,38 +555,28 @@ def update_application_status(application_id):
         ApplicationStatus.SELECTED,
         ApplicationStatus.REJECTED,
     ]:
-        return jsonify({"message": "Invalid status"}), 400
+        return error_response("Invalid status")
 
-    status_order = {
-        ApplicationStatus.APPLIED: 0,
-        ApplicationStatus.SHORTLISTED: 1,
-        ApplicationStatus.SELECTED: 2,
-        ApplicationStatus.REJECTED: -1,
-    }
-
-    if (
-        new_status != ApplicationStatus.REJECTED
-        and app_record.status != ApplicationStatus.REJECTED
-    ):
-        current_level = status_order.get(app_record.status, 0)
-        new_level = status_order.get(new_status, 0)
-        if (
-            new_level <= current_level
-            and app_record.status != ApplicationStatus.APPLIED
-        ):
-            return jsonify({"message": "Cannot move status backward"}), 400
+    ok, reason = app_record.can_transition_to(new_status)
+    if not ok:
+        return error_response(reason)
 
     app_record.status = new_status
 
     if new_status == ApplicationStatus.SELECTED:
         app_record.student.is_placed = True
 
-    db.session.commit()
-    return jsonify({"message": "Application status updated successfully"}), 200
+    try:
+        db.session.commit()
+        return success_response("Application status updated successfully")
+    except Exception:
+        db.session.rollback()
+        return error_response("Database error. Please try again.", 500)
 
 
 @company_bp.route(
-    "/applications/<int:application_id>/interview", methods=["PATCH"]
+    "/applications/<int:application_id>/interview",
+    methods=["PATCH"],
 )
 @company_required
 def update_application_interview(application_id):
@@ -519,31 +584,29 @@ def update_application_interview(application_id):
     app_record = db.get_or_404(Application, application_id)
 
     if app_record.drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     if app_record.status == ApplicationStatus.REJECTED:
-        return jsonify(
-            {"message": "Cannot schedule interview for rejected application"}
-        ), 400
+        return error_response(
+            "Cannot schedule interview for rejected application"
+        )
 
     data = request.get_json()
 
     try:
         if "interview_date" in data:
             interview_date = parse_iso_datetime(data["interview_date"])
-            now = datetime.utcnow()
+            now = datetime.now(UTC).replace(tzinfo=None)
             if interview_date < now:
-                return jsonify(
-                    {"message": "interview_date must be in the future"}
-                ), 400
+                return error_response("interview_date must be in the future")
             app_record.interview_date = interview_date
 
         if "interview_mode" in data:
             mode = data["interview_mode"]
             if mode not in ["Online", "Offline"]:
-                return jsonify(
-                    {"message": "interview_mode must be Online or Offline"}
-                ), 400
+                return error_response(
+                    "interview_mode must be Online or Offline"
+                )
             app_record.interview_mode = mode
 
         if "interview_link" in data:
@@ -553,31 +616,42 @@ def update_application_interview(application_id):
             app_record.interview_mode == "Online"
             and not app_record.interview_link
         ):
-            return jsonify(
-                {"message": "interview_link is required when mode is Online"}
-            ), 400
+            return error_response(
+                "interview_link is required when mode is Online"
+            )
 
     except Exception as e:
-        return jsonify({"message": str(e)}), 400
+        return error_response(str(e))
 
-    db.session.commit()
-    return jsonify({"message": "Interview details updated successfully"}), 200
+    try:
+        db.session.commit()
+        return success_response("Interview details updated successfully")
+    except Exception:
+        db.session.rollback()
+        return error_response("Database error. Please try again.", 500)
 
 
-@company_bp.route("/applications/<int:application_id>/resume", methods=["GET"])
+@company_bp.route(
+    "/applications/<int:application_id>/resume",
+    methods=["GET"],
+)
 @company_required
 def get_application_resume(application_id):
     _, company = get_current_company()
     app_record = db.get_or_404(Application, application_id)
 
     if app_record.drive.company_id != company.id:
-        return jsonify({"message": "Access denied"}), 403
+        return error_response("Access denied", 403)
 
     filename = app_record.student.resume_filename
     if not filename:
-        return jsonify({"message": "Student has no resume uploaded"}), 404
+        return error_response("Student has no resume uploaded", 404)
 
     upload_folder = os.path.join(
-        current_app.root_path, "..", "static", "uploads", "resumes"
+        current_app.root_path,
+        "..",
+        "static",
+        "uploads",
+        "resumes",
     )
     return send_from_directory(upload_folder, filename)
