@@ -43,7 +43,7 @@
   --color-text-placeholder: var(--color-gray-400);
 
   /* Typography */
-  --font-family-base: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  --font-family-base: 'DM Sans', 'Inter', sans-serif;
   --font-size-xs: 10px;
   --font-size-sm: 12px;
   --font-size-base: 14px;
@@ -528,7 +528,26 @@ tr:hover td {
   color: var(--color-gray-600);
 }
 
-/* 7. Avatar Color Classes */
+/* 7. Filter Select Utility */
+.filter-select {
+  flex: 0 0 160px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-base);
+  font-family: var(--font-family-base);
+  color: var(--color-text-primary);
+  background: var(--color-white);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.filter-select:focus {
+  border-color: var(--color-primary);
+}
+
+/* 8. Avatar Color Classes */
 .avatar-blue {
   background-color: var(--color-primary);
   color: var(--color-white);

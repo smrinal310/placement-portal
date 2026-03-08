@@ -18,28 +18,17 @@
       </div>
       <div class="companies__header-actions">
         <AppButton variant="outline" iconLeft="bi bi-download" @click="handleExport">Export</AppButton>
-        <AppButton variant="primary" iconLeft="bi bi-plus-lg" @click="handleAddCompany">Add Company</AppButton>
       </div>
     </header>
 
-    <div class="card companies__filter-bar">
-      <div class="companies__search-wrap">
-        <i class="bi bi-search companies__search-icon"></i>
-        <input
-          type="text"
-          class="companies__search-input"
-          placeholder="Search companies by name, industry..."
-          v-model="searchQuery"
-        />
-      </div>
-      <select class="companies__status-select" v-model="selectedStatus">
+    <AppFilterBar v-model="searchQuery" placeholder="Search companies by name, industry...">
+      <select class="filter-select" v-model="selectedStatus">
         <option value="">All Statuses</option>
         <option :value="ApprovalStatus.APPROVED">Approved</option>
         <option :value="ApprovalStatus.PENDING">Pending</option>
         <option :value="ApprovalStatus.REJECTED">Rejected</option>
       </select>
-      <AppButton variant="outline" iconLeft="bi bi-funnel">Filter</AppButton>
-    </div>
+    </AppFilterBar>
 
     <div class="card companies__table-card">
       <AppSpinner v-if="adminStore.loading" />
@@ -145,7 +134,7 @@
                         v-if="company.account_status === AccountStatus.BLACKLISTED"
                         class="companies__action-btn companies__action-btn--success"
                         title="Activate"
-                        @click="handleActivate(company)"
+                        @click="openModal('activate', company)"
                       >
                         <i class="bi bi-check-circle"></i>
                       </button>
@@ -254,17 +243,50 @@
         </div>
       </div>
     </AppModal>
+
+    <AppModal
+      :show="modalState.show && modalState.type === 'activate'"
+      title="Activate Company"
+      headerIcon="bi bi-building-check"
+      confirmLabel="Confirm Activation"
+      confirmVariant="primary"
+      warningMessage="This company will regain full access and can create new placement drives."
+      :loading="adminStore.actionLoading"
+      @confirm="handleActivateConfirm"
+      @cancel="closeModal"
+    >
+      <div class="companies__modal-summary">
+        <div class="companies__modal-grid">
+          <div>
+            <div class="companies__modal-label">Company Name</div>
+            <div class="companies__modal-value">{{ modalState.company?.company_name }}</div>
+          </div>
+          <div>
+            <div class="companies__modal-label">Industry</div>
+            <div class="companies__modal-value">{{ modalState.company?.industry || '—' }}</div>
+          </div>
+        </div>
+        <div class="companies__modal-hr">
+          <AppAvatar :name="modalState.company?.hr_name || ''" size="sm" />
+          <div>
+            <div class="companies__modal-value">{{ modalState.company?.hr_name }}</div>
+            <div class="companies__modal-label">{{ modalState.company?.email }}</div>
+          </div>
+        </div>
+      </div>
+    </AppModal>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { formatDate } from '@/utils/formatters'
 import { ApprovalStatus, AccountStatus } from '@/utils/constants'
 
 import AppButton from '@/components/common/AppButton.vue'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
@@ -273,7 +295,6 @@ import AppPagination from '@/components/common/AppPagination.vue'
 import AppModal from '@/components/common/AppModal.vue'
 
 const router = useRouter()
-const route = useRoute()
 const adminStore = useAdminStore()
 
 const searchQuery = ref('')
@@ -359,9 +380,10 @@ const handleBlacklistConfirm = async () => {
   }
 }
 
-const handleActivate = async (company) => {
+const handleActivateConfirm = async () => {
   try {
-    await adminStore.activateCompany(company.id)
+    await adminStore.activateCompany(modalState.company.id)
+    closeModal()
     showFeedback('Company activated successfully.')
   } catch {
     showFeedback(adminStore.error || 'Failed to activate company.', 'error')
@@ -369,7 +391,6 @@ const handleActivate = async (company) => {
 }
 
 const handleExport = () => { console.log('TODO: Export companies') }
-const handleAddCompany = () => { console.log('TODO: Add company') }
 
 watch(selectedStatus, () => {
   adminStore.fetchCompanies({ status: selectedStatus.value, search: searchQuery.value, page: 1 })
@@ -383,9 +404,6 @@ watch(searchQuery, () => {
 })
 
 onMounted(() => {
-  if (route.query.status) {
-    selectedStatus.value = route.query.status
-  }
   loadCompanies()
 })
 </script>
@@ -421,72 +439,6 @@ onMounted(() => {
   display: flex;
   gap: var(--space-3);
   align-items: center;
-}
-
-.companies__filter-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.companies__search-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-}
-
-.companies__search-icon {
-  position: absolute;
-  left: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text-muted);
-  pointer-events: none;
-}
-
-.companies__search-input {
-  width: 100%;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
-  padding-left: var(--space-8);
-  padding-right: var(--space-3);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-base);
-  color: var(--color-text-primary);
-  background: var(--color-white);
-  transition: border-color var(--transition-fast);
-  outline: none;
-}
-
-.companies__search-input:focus {
-  border-color: var(--color-primary);
-}
-
-.companies__search-input::placeholder {
-  color: var(--color-text-placeholder);
-}
-
-.companies__status-select {
-  min-width: 160px;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
-  padding-left: var(--space-3);
-  padding-right: var(--space-3);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-base);
-  color: var(--color-text-primary);
-  background: var(--color-white);
-  cursor: pointer;
-  outline: none;
-  transition: border-color var(--transition-fast);
-}
-
-.companies__status-select:focus {
-  border-color: var(--color-primary);
 }
 
 .companies__table-card {

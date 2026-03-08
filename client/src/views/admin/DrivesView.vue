@@ -11,36 +11,23 @@
       </div>
     </Transition>
 
-    <div class="card drives__filter-bar">
-      <div class="drives__search-wrap">
-        <i class="bi bi-search drives__search-icon"></i>
-        <input
-          type="text"
-          class="drives__search-input"
-          placeholder="Search by job title, company..."
-          v-model="searchQuery"
-        />
+    <header class="drives__header">
+      <div>
+        <h1 class="drives__title">Placement Drives</h1>
+        <p class="drives__subtitle">Review and manage company placement drive requests.</p>
       </div>
-
-      <div class="drives__status-group">
-        <span class="drives__filter-label">Filter by status:</span>
-        <div class="drives__toggle-group">
-          <button
-            v-for="opt in statusOptions"
-            :key="opt.value"
-            class="drives__toggle-btn"
-            :class="{ 'drives__toggle-btn--active': activeStatusFilter === opt.value }"
-            @click="activeStatusFilter = opt.value"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
-      </div>
-
       <AppButton variant="primary" iconLeft="bi bi-plus-lg" @click="router.push('/admin/drives/create')">
         Create Drive
       </AppButton>
-    </div>
+    </header>
+
+    <AppFilterBar v-model="searchQuery" placeholder="Search by job title, company...">
+      <select class="filter-select" v-model="activeStatusFilter">
+        <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+    </AppFilterBar>
 
     <div class="card drives__table-card">
       <AppSpinner v-if="adminStore.loading" />
@@ -260,6 +247,7 @@ import { formatDate, formatNumber } from '@/utils/formatters'
 import { DriveStatus } from '@/utils/constants'
 
 import AppButton from '@/components/common/AppButton.vue'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
@@ -413,97 +401,24 @@ onUnmounted(() => {
   gap: var(--space-6);
 }
 
-.drives__filter-bar {
+.drives__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-4);
-  flex-wrap: wrap;
 }
 
-.drives__search-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-}
-
-.drives__search-icon {
-  position: absolute;
-  left: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text-muted);
-  pointer-events: none;
-}
-
-.drives__search-input {
-  width: 100%;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
-  padding-left: var(--space-8);
-  padding-right: var(--space-3);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-base);
+.drives__title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  background: var(--color-white);
-  transition: border-color var(--transition-fast);
-  outline: none;
+  margin: 0 0 var(--space-1) 0;
 }
 
-.drives__search-input:focus {
-  border-color: var(--color-primary);
-}
-
-.drives__search-input::placeholder {
-  color: var(--color-text-placeholder);
-}
-
-.drives__status-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-.drives__filter-label {
+.drives__subtitle {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.drives__toggle-group {
-  display: flex;
-}
-
-.drives__toggle-btn {
-  padding-block: var(--space-2);
-  padding-inline: var(--space-4);
-  border: var(--border-width) solid var(--border-color);
-  background: transparent;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-  outline: none;
-}
-
-.drives__toggle-btn:first-child {
-  border-radius: var(--border-radius-md) 0 0 var(--border-radius-md);
-}
-
-.drives__toggle-btn:last-child {
-  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
-}
-
-.drives__toggle-btn:not(:first-child) {
-  border-left: none;
-}
-
-.drives__toggle-btn--active {
-  background: var(--color-primary);
-  color: var(--color-white);
-  border-color: var(--color-primary);
+  margin: 0;
 }
 
 .drives__table-card {

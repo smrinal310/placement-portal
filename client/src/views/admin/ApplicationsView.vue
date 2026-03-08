@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { ApplicationStatus } from '@/utils/constants'
@@ -7,13 +7,31 @@ import { formatDate } from '@/utils/formatters'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPagination from '@/components/common/AppPagination.vue'
+import AppModal from '@/components/common/AppModal.vue'
 
 const router = useRouter()
 const adminStore = useAdminStore()
 
+const modalState = reactive({
+  show: false,
+  app: null
+})
+
+const openModal = (app) => {
+  modalState.app = app
+  modalState.show = true
+}
+
+const closeModal = () => {
+  modalState.show = false
+  setTimeout(() => { modalState.app = null }, 300)
+}
+
+const searchQuery = ref('')
 const selectedDriveId = ref('')
 const selectedCompanyId = ref('')
 const selectedStatus = ref('')
@@ -23,6 +41,7 @@ const feedbackType = ref('success')
 
 function applyFilters() {
   adminStore.fetchApplications({
+    search: searchQuery.value,
     driveId: selectedDriveId.value,
     companyId: selectedCompanyId.value,
     status: selectedStatus.value,
@@ -30,20 +49,11 @@ function applyFilters() {
   })
 }
 
-function clearFilters() {
-  selectedDriveId.value = ''
-  selectedCompanyId.value = ''
-  selectedStatus.value = ''
-  adminStore.fetchApplications({ driveId: '', companyId: '', status: '', page: 1 })
-}
-
-watch([selectedDriveId, selectedCompanyId, selectedStatus], applyFilters)
+watch([searchQuery, selectedDriveId, selectedCompanyId, selectedStatus], applyFilters)
 
 function handleViewStudent(app) {
   if (app.student_id) {
     router.push('/admin/students/' + app.student_id)
-  } else {
-    console.log('TODO: student_id not returned by backend for application', app.id)
   }
 }
 
@@ -87,42 +97,30 @@ onMounted(() => {
       </AppButton>
     </div>
 
-    <div class="applications__filters card">
-      <div class="applications__filter-group">
-        <label class="applications__filter-label">Drive Name</label>
-        <select v-model="selectedDriveId" class="applications__select">
-          <option value="">All Drives</option>
-          <option v-for="opt in adminStore.driveOptions" :key="opt.id" :value="opt.id">
-            {{ opt.label }}
-          </option>
-        </select>
-      </div>
+    <AppFilterBar v-model="searchQuery" placeholder="Search by student, drive, company...">
+      <select v-model="selectedDriveId" class="filter-select">
+        <option value="">All Drives</option>
+        <option v-for="opt in adminStore.driveOptions" :key="opt.id" :value="opt.id">
+          {{ opt.label }}
+        </option>
+      </select>
 
-      <div class="applications__filter-group">
-        <label class="applications__filter-label">Company</label>
-        <select v-model="selectedCompanyId" class="applications__select">
-          <option value="">All Companies</option>
-          <option v-for="opt in adminStore.companyOptions" :key="opt.id" :value="opt.id">
-            {{ opt.label }}
-          </option>
-        </select>
-      </div>
+      <select v-model="selectedCompanyId" class="filter-select">
+        <option value="">All Companies</option>
+        <option v-for="opt in adminStore.companyOptions" :key="opt.id" :value="opt.id">
+          {{ opt.label }}
+        </option>
+      </select>
 
-      <div class="applications__filter-group">
-        <label class="applications__filter-label">Status</label>
-        <select v-model="selectedStatus" class="applications__select">
-          <option value="">All Statuses</option>
-          <option :value="ApplicationStatus.APPLIED">Applied</option>
-          <option :value="ApplicationStatus.SHORTLISTED">Shortlisted</option>
-          <option :value="ApplicationStatus.SELECTED">Selected</option>
-          <option :value="ApplicationStatus.REJECTED">Rejected</option>
-        </select>
-      </div>
+      <select v-model="selectedStatus" class="filter-select">
+        <option value="">All Statuses</option>
+        <option :value="ApplicationStatus.APPLIED">Applied</option>
+        <option :value="ApplicationStatus.SHORTLISTED">Shortlisted</option>
+        <option :value="ApplicationStatus.SELECTED">Selected</option>
+        <option :value="ApplicationStatus.REJECTED">Rejected</option>
+      </select>
 
-      <AppButton variant="outline" class="applications__clear-btn" @click="clearFilters">
-        Clear Filters
-      </AppButton>
-    </div>
+    </AppFilterBar>
 
     <div class="applications__body card">
       <div v-if="adminStore.loading" class="applications__spinner-wrap">
@@ -175,7 +173,7 @@ onMounted(() => {
                   <AppBadge :status="app.status" />
                 </td>
                 <td class="applications__td">
-                  <button class="applications__action-btn" @click="handleViewStudent(app)" title="View student">
+                  <button class="applications__action-btn" @click="openModal(app)" title="View application">
                     <i class="bi bi-eye"></i>
                   </button>
                 </td>
@@ -195,15 +193,55 @@ onMounted(() => {
         </div>
       </template>
     </div>
+
+    <AppModal
+      :show="modalState.show"
+      title="Application Details"
+      headerIcon="bi bi-file-text-fill"
+      confirmLabel="View Student Profile"
+      confirmVariant="primary"
+      :loading="false"
+      @confirm="handleViewStudent(modalState.app); closeModal()"
+      @cancel="closeModal"
+    >
+      <div class="applications__modal-body">
+        <div class="applications__modal-section">
+          <div class="applications__modal-row">
+            <AppAvatar :name="modalState.app?.student_name || ''" size="sm" />
+            <div>
+              <div class="applications__modal-name">{{ modalState.app?.student_name }}</div>
+              <div class="applications__modal-meta">{{ modalState.app?.student_branch }} &bull; Year {{ modalState.app?.student_year }}</div>
+            </div>
+            <div class="applications__modal-status">
+              <AppBadge :status="modalState.app?.status" />
+            </div>
+          </div>
+        </div>
+
+        <div class="applications__modal-grid">
+          <div class="applications__modal-field">
+            <div class="applications__modal-label">Company</div>
+            <div class="applications__modal-value">{{ modalState.app?.company_name }}</div>
+          </div>
+          <div class="applications__modal-field">
+            <div class="applications__modal-label">Drive / Role</div>
+            <div class="applications__modal-value">{{ modalState.app?.drive_title }}</div>
+          </div>
+          <div class="applications__modal-field">
+            <div class="applications__modal-label">Applied On</div>
+            <div class="applications__modal-value">{{ formatDate(modalState.app?.applied_at, { style: 'long' }) }}</div>
+          </div>
+        </div>
+      </div>
+    </AppModal>
   </div>
 </template>
 
 <style scoped>
 .applications {
-  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
   position: relative;
 }
 
@@ -260,48 +298,6 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin: 0;
-}
-
-.applications__filters {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.applications__filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.applications__filter-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-}
-
-.applications__select {
-  min-width: 180px;
-  padding: var(--space-2) var(--space-3);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-family-base);
-  color: var(--color-text-primary);
-  background-color: var(--color-surface);
-  cursor: pointer;
-  outline: none;
-}
-
-.applications__select:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-}
-
-.applications__clear-btn {
-  align-self: flex-end;
 }
 
 .applications__body {
@@ -409,5 +405,63 @@ onMounted(() => {
 .applications__pagination {
   padding: var(--space-4) var(--space-4) var(--space-2);
   border-top: var(--border-width) solid var(--border-color);
+}
+
+.applications__modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.applications__modal-section {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-4);
+}
+
+.applications__modal-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.applications__modal-status {
+  margin-left: auto;
+}
+
+.applications__modal-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+}
+
+.applications__modal-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.applications__modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.applications__modal-field:last-child {
+  grid-column: 1 / -1;
+}
+
+.applications__modal-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.applications__modal-value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 </style>

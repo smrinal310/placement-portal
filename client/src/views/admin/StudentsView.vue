@@ -16,35 +16,22 @@
         <h1 class="students__title">Student Management</h1>
         <p class="students__subtitle">Manage student profiles, academic records, and eligibility status.</p>
       </div>
-      <div class="students__header-actions">
-        <AppButton variant="outline" iconLeft="bi bi-upload" @click="handleImport">Import Students</AppButton>
-        <AppButton variant="primary" iconLeft="bi bi-plus-lg" @click="handleAdd">Add Student</AppButton>
-      </div>
+
     </header>
 
-    <div class="card students__filter-bar">
-      <div class="students__search-wrap">
-        <i class="bi bi-search students__search-icon"></i>
-        <input
-          type="text"
-          class="students__search-input"
-          placeholder="Search by name, ID or email..."
-          v-model="searchQuery"
-        />
-      </div>
-      <select class="students__select" v-model="selectedBranch">
+    <AppFilterBar v-model="searchQuery" placeholder="Search by name, ID or email...">
+      <select class="filter-select" v-model="selectedBranch">
         <option value="">All Branches</option>
         <option v-for="branch in BRANCH_LIST" :key="branch" :value="branch">{{ branch }}</option>
       </select>
-      <select class="students__select" v-model="selectedYear">
+      <select class="filter-select" v-model="selectedYear">
         <option value="">All Years</option>
         <option value="1">1</option>
         <option value="2">2</option>
         <option value="3">3</option>
         <option value="4">4</option>
       </select>
-      <AppButton variant="outline" iconLeft="bi bi-funnel">More Filters</AppButton>
-    </div>
+    </AppFilterBar>
 
     <div class="card students__table-card">
       <AppSpinner v-if="adminStore.loading" />
@@ -200,7 +187,7 @@ import { useAdminStore } from '@/stores/admin'
 import { formatCGPA } from '@/utils/formatters'
 import { AccountStatus, BRANCH_LIST } from '@/utils/constants'
 
-import AppButton from '@/components/common/AppButton.vue'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppBadge from '@/components/common/AppBadge.vue'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
@@ -276,9 +263,6 @@ const handleActivateConfirm = async () => {
   }
 }
 
-const handleImport = () => { console.log('TODO: Import students') }
-const handleAdd = () => { console.log('TODO: Add student') }
-
 watch(selectedBranch, () => {
   adminStore.fetchStudents({ branch: selectedBranch.value, search: searchQuery.value, year: selectedYear.value, page: 1 })
 })
@@ -330,72 +314,6 @@ onMounted(() => {
   display: flex;
   gap: var(--space-3);
   align-items: center;
-}
-
-.students__filter-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.students__search-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-}
-
-.students__search-icon {
-  position: absolute;
-  left: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text-muted);
-  pointer-events: none;
-}
-
-.students__search-input {
-  width: 100%;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
-  padding-left: var(--space-8);
-  padding-right: var(--space-3);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-base);
-  color: var(--color-text-primary);
-  background: var(--color-white);
-  transition: border-color var(--transition-fast);
-  outline: none;
-}
-
-.students__search-input:focus {
-  border-color: var(--color-primary);
-}
-
-.students__search-input::placeholder {
-  color: var(--color-text-placeholder);
-}
-
-.students__select {
-  min-width: 140px;
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
-  padding-left: var(--space-3);
-  padding-right: var(--space-3);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-base);
-  color: var(--color-text-primary);
-  background: var(--color-white);
-  cursor: pointer;
-  outline: none;
-  transition: border-color var(--transition-fast);
-}
-
-.students__select:focus {
-  border-color: var(--color-primary);
 }
 
 .students__table-card {
