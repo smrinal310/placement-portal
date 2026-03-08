@@ -1,6 +1,7 @@
 import os
 
 from flask import Flask
+from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
 from .apis.admin import admin_bp
@@ -24,6 +25,17 @@ def create_app():
     mail.init_app(app)
     cache.init_app(app)
     app.celery = make_celery(app)
+
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(","),
+            "supports_credentials": True
+        },
+        r"/auth/*": {
+            "origins": os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(","),
+            "supports_credentials": True
+        }
+    })
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)

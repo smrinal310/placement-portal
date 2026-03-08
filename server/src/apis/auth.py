@@ -1,9 +1,9 @@
 from flask import Blueprint, request
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, jwt_required
 
 from ..constants import AccountStatus, UserRole
 from ..helpers.utils import error_response
-from ..models import Company, User
+from ..models import Company, Student, User
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -29,9 +29,16 @@ def login():
         "role": user.role,
     }
 
-    if user.role == UserRole.COMPANY:
+    if user.role == UserRole.ADMIN:
+        user_info["name"] = user.email.split("@")[0].capitalize()
+    elif user.role == UserRole.STUDENT:
+        student = Student.query.filter_by(user_id=user.id).first()
+        if student:
+            user_info["name"] = student.full_name
+    elif user.role == UserRole.COMPANY:
         company = Company.query.filter_by(user_id=user.id).first()
         if company:
+            user_info["name"] = company.company_name
             additional_claims["approval_status"] = company.approval_status
             user_info["approval_status"] = company.approval_status
 
@@ -48,3 +55,9 @@ def login():
         },
         200,
     )
+
+
+@auth_bp.route("/logout", methods=["POST"])
+@jwt_required()
+def logout():
+    return {"message": "Logged out successfully"}, 200

@@ -220,6 +220,7 @@ def get_companies():
                 "industry": company.industry,
                 "hr_name": company.hr_name,
                 "hr_contact": company.hr_contact,
+                "account_status": user.account_status,
                 "created_at": (
                     company.created_at.isoformat()
                     if company.created_at

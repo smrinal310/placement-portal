@@ -1,0 +1,563 @@
+/* src/styles/design-system.css */
+
+/* 1. CSS Custom Properties */
+:root {
+  /* Colors */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #eff6ff;
+  --color-info: #1e40af;
+  --color-info-light: #dbeafe;
+
+  --color-danger: #ef4444;
+  --color-danger-light: #fee2e2;
+  --color-danger-dark: #991b1b;
+
+  --color-success: #166534;
+  --color-success-light: #dcfce7;
+
+  --color-warning: #92400e;
+  --color-warning-light: #fef3c7;
+
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #f1f5f9;
+  --color-gray-200: #e2e8f0;
+  --color-gray-300: #cbd5e1;
+  --color-gray-400: #94a3b8;
+  --color-gray-500: #64748b;
+  --color-gray-600: #475569;
+  --color-gray-700: #334155;
+  --color-gray-800: #1e293b;
+  --color-gray-900: #0f172a;
+
+  --color-white: #ffffff;
+
+  --color-sidebar-bg: var(--color-white);
+  --color-content-bg: var(--color-gray-50);
+  --color-card-bg: var(--color-white);
+  --color-border: var(--color-gray-200);
+
+  --color-text-primary: var(--color-gray-900);
+  --color-text-secondary: var(--color-gray-700);
+  --color-text-muted: var(--color-gray-500);
+  --color-text-placeholder: var(--color-gray-400);
+
+  /* Typography */
+  --font-family-base: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 30px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-base: 1.5;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Border */
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+  --border-radius-xl: 12px;
+  --border-radius-pill: 999px;
+  --border-width: 1px;
+  --border-color: var(--color-gray-200);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+  /* Layout Constants */
+  --sidebar-width: 240px;
+  --navbar-height: 60px;
+  --content-padding: var(--space-6);
+  --card-padding: var(--space-6);
+  --table-cell-padding: var(--space-3) var(--space-4);
+
+  /* Form Elements & Icons */
+  --toggle-width: 44px;
+  --toggle-height: 24px;
+  --toggle-thumb-size: 20px;
+  --toggle-gap: 2px;
+  --pagination-button-size: 36px;
+  --spinner-size-sm: 16px;
+  --spinner-size-md: 24px;
+  --spinner-size-lg: 32px;
+  --empty-state-icon-size: 48px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Interactivity & Buttons */
+  --button-active-scale: 0.98;
+  --opacity-disabled: 0.6;
+  --opacity-loading: 0.8;
+  --opacity-hover: 0.9;
+  --spinner-speed: 1s;
+
+  /* Z-index */
+  --z-dropdown: 100;
+  --z-navbar: 200;
+  --z-sidebar: 300;
+  --z-modal: 400;
+  --z-tooltip: 500;
+}
+
+/* 2. CSS Reset & Base Styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  color: var(--color-text-secondary);
+  background-color: var(--color-content-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 3. Utility Classes */
+/* Display */
+.flex {
+  display: flex;
+}
+.flex-col {
+  flex-direction: column;
+}
+.items-center {
+  align-items: center;
+}
+.items-start {
+  align-items: flex-start;
+}
+.justify-between {
+  justify-content: space-between;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+.justify-center {
+  justify-content: center;
+}
+.flex-1 {
+  flex: 1;
+}
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+/* Gap */
+.gap-1 {
+  gap: var(--space-1);
+}
+.gap-2 {
+  gap: var(--space-2);
+}
+.gap-3 {
+  gap: var(--space-3);
+}
+.gap-4 {
+  gap: var(--space-4);
+}
+.gap-5 {
+  gap: var(--space-5);
+}
+.gap-6 {
+  gap: var(--space-6);
+}
+
+/* Text Typography */
+.text-xs {
+  font-size: var(--font-size-xs);
+}
+.text-sm {
+  font-size: var(--font-size-sm);
+}
+.text-base {
+  font-size: var(--font-size-base);
+}
+.text-md {
+  font-size: var(--font-size-md);
+}
+.text-lg {
+  font-size: var(--font-size-lg);
+}
+
+.text-bold {
+  font-weight: var(--font-weight-bold);
+}
+.text-semibold {
+  font-weight: var(--font-weight-semibold);
+}
+.text-medium {
+  font-weight: var(--font-weight-medium);
+}
+
+/* Text Colors */
+.text-primary {
+  color: var(--color-primary);
+}
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+.text-muted {
+  color: var(--color-text-muted);
+}
+.text-danger {
+  color: var(--color-danger);
+}
+.text-success {
+  color: var(--color-success);
+}
+.text-warning {
+  color: var(--color-warning);
+}
+.text-white {
+  color: var(--color-white);
+}
+
+/* Text Alignment & Misc */
+.text-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.text-center {
+  text-align: center;
+}
+.text-right {
+  text-align: right;
+}
+
+/* Margin Top/Bottom */
+.mt-1 {
+  margin-top: var(--space-1);
+}
+.mt-2 {
+  margin-top: var(--space-2);
+}
+.mt-3 {
+  margin-top: var(--space-3);
+}
+.mt-4 {
+  margin-top: var(--space-4);
+}
+.mt-5 {
+  margin-top: var(--space-5);
+}
+.mt-6 {
+  margin-top: var(--space-6);
+}
+
+.mb-1 {
+  margin-bottom: var(--space-1);
+}
+.mb-2 {
+  margin-bottom: var(--space-2);
+}
+.mb-3 {
+  margin-bottom: var(--space-3);
+}
+.mb-4 {
+  margin-bottom: var(--space-4);
+}
+.mb-5 {
+  margin-bottom: var(--space-5);
+}
+.mb-6 {
+  margin-bottom: var(--space-6);
+}
+
+/* Margin Left/Right */
+.ml-1 {
+  margin-left: var(--space-1);
+}
+.ml-2 {
+  margin-left: var(--space-2);
+}
+.ml-3 {
+  margin-left: var(--space-3);
+}
+.ml-4 {
+  margin-left: var(--space-4);
+}
+
+.mr-1 {
+  margin-right: var(--space-1);
+}
+.mr-2 {
+  margin-right: var(--space-2);
+}
+.mr-3 {
+  margin-right: var(--space-3);
+}
+.mr-4 {
+  margin-right: var(--space-4);
+}
+
+/* Padding */
+.p-1 {
+  padding: var(--space-1);
+}
+.p-2 {
+  padding: var(--space-2);
+}
+.p-3 {
+  padding: var(--space-3);
+}
+.p-4 {
+  padding: var(--space-4);
+}
+.p-5 {
+  padding: var(--space-5);
+}
+.p-6 {
+  padding: var(--space-6);
+}
+
+/* Padding X/Y */
+.px-2 {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+.px-3 {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+.px-4 {
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+}
+.px-5 {
+  padding-left: var(--space-5);
+  padding-right: var(--space-5);
+}
+.px-6 {
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+}
+
+.py-1 {
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+.py-2 {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+.py-3 {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.py-4 {
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+
+/* Layout Utilities */
+.w-full {
+  width: 100%;
+}
+.h-full {
+  height: 100%;
+}
+.min-h-screen {
+  min-height: 100vh;
+}
+.relative {
+  position: relative;
+}
+.absolute {
+  position: absolute;
+}
+.fixed {
+  position: fixed;
+}
+.overflow-hidden {
+  overflow: hidden;
+}
+.overflow-auto {
+  overflow: auto;
+}
+.hidden {
+  display: none;
+}
+
+/* 4. Base Component Styles */
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: color var(--transition-fast);
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background: var(--color-white);
+  transition: border-color var(--transition-fast);
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-primary);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  padding: var(--table-cell-padding);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+}
+
+td {
+  padding: var(--table-cell-padding);
+  border-bottom: 1px solid var(--border-color);
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background-color: var(--color-gray-50);
+}
+
+/* 5. Card Base Class */
+.card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--card-padding);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* 6. Status Color Map Classes */
+.badge-approved {
+  background-color: var(--color-success-light);
+  color: var(--color-success);
+}
+.badge-pending {
+  background-color: var(--color-warning-light);
+  color: var(--color-warning);
+}
+.badge-rejected {
+  background-color: var(--color-danger-light);
+  color: var(--color-danger-dark);
+}
+.badge-active {
+  background-color: var(--color-success-light);
+  color: var(--color-success);
+}
+.badge-blacklisted {
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-600);
+}
+.badge-selected {
+  background-color: var(--color-success-light);
+  color: var(--color-success);
+}
+.badge-shortlisted {
+  background-color: var(--color-warning-light);
+  color: var(--color-warning);
+}
+.badge-applied {
+  background-color: var(--color-info-light);
+  color: var(--color-info);
+}
+.badge-closed {
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-600);
+}
+
+/* 7. Avatar Color Classes */
+.avatar-blue {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+}
+.avatar-green {
+  background-color: #10b981;
+  color: var(--color-white);
+} /* Emerald */
+.avatar-orange {
+  background-color: #f97316;
+  color: var(--color-white);
+} /* Orange */
+.avatar-red {
+  background-color: var(--color-danger);
+  color: var(--color-white);
+}
+.avatar-teal {
+  background-color: #14b8a6;
+  color: var(--color-white);
+} /* Teal */
+.avatar-purple {
+  background-color: #a855f7;
+  color: var(--color-white);
+} /* Purple */
+.avatar-pink {
+  background-color: #ec4899;
+  color: var(--color-white);
+} /* Pink */
+.avatar-indigo {
+  background-color: #6366f1;
+  color: var(--color-white);
+} /* Indigo */
