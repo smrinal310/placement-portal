@@ -1,5 +1,6 @@
 from flask import Blueprint, request
 from sqlalchemy import func
+from werkzeug.exceptions import NotFound
 
 from src.constants import (
     AccountStatus,
@@ -8,6 +9,13 @@ from src.constants import (
     DriveStatus,
 )
 from src.helpers.auth import admin_required
+from src.helpers.cache import (
+    cache,
+    invalidate_application_cache,
+    invalidate_company_cache,
+    invalidate_drive_cache,
+    invalidate_student_cache,
+)
 from src.helpers.utils import error_response, escape_like, success_response
 from src.models import Application, Company, PlacementDrive, Student, User, db
 
@@ -142,6 +150,7 @@ def _get_recent_activity() -> list[dict]:
 
 @admin_bp.route("/dashboard", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_dashboard():
     try:
         return success_response(
@@ -161,6 +170,7 @@ def get_dashboard():
 
 @admin_bp.route("/companies", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_companies():
     try:
         status_filter = request.args.get("status")
@@ -226,6 +236,7 @@ def get_companies():
 
 @admin_bp.route("/companies/<int:company_id>", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_company(company_id):
     try:
         company = db.get_or_404(Company, company_id)
@@ -251,6 +262,8 @@ def get_company(company_id):
                 "drives": drives_data,
             },
         )
+    except NotFound:
+        raise
     except Exception as e:
         return error_response(str(e), 500)
 
@@ -265,6 +278,9 @@ def approve_company(company_id):
 
         company.approval_status = ApprovalStatus.APPROVED
         db.session.commit()
+        invalidate_company_cache()
+        invalidate_drive_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Company approved successfully",
@@ -293,6 +309,9 @@ def reject_company(company_id):
         company.approval_status = ApprovalStatus.REJECTED
         company.rejection_reason = data["reason"]
         db.session.commit()
+        invalidate_company_cache()
+        invalidate_drive_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Company rejected successfully",
@@ -319,6 +338,9 @@ def blacklist_company(company_id):
 
         user.account_status = AccountStatus.BLACKLISTED
         db.session.commit()
+        invalidate_company_cache()
+        invalidate_drive_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Company blacklisted successfully",
@@ -344,6 +366,9 @@ def activate_company(company_id):
 
         user.account_status = AccountStatus.ACTIVE
         db.session.commit()
+        invalidate_company_cache()
+        invalidate_drive_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Company account activated successfully",
@@ -359,6 +384,7 @@ def activate_company(company_id):
 
 @admin_bp.route("/students", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_students():
     try:
         search_query = request.args.get("search")
@@ -406,6 +432,7 @@ def get_students():
 
 @admin_bp.route("/students/<int:student_id>", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_student(student_id):
     try:
         student = db.get_or_404(Student, student_id)
@@ -439,6 +466,8 @@ def get_student(student_id):
                 "applications": apps_data,
             },
         )
+    except NotFound:
+        raise
     except Exception as e:
         return error_response(str(e), 500)
 
@@ -455,6 +484,8 @@ def blacklist_student(student_id):
 
         user.account_status = AccountStatus.BLACKLISTED
         db.session.commit()
+        invalidate_student_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Student blacklisted successfully",
@@ -480,6 +511,8 @@ def activate_student(student_id):
 
         user.account_status = AccountStatus.ACTIVE
         db.session.commit()
+        invalidate_student_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Student account activated successfully",
@@ -495,6 +528,7 @@ def activate_student(student_id):
 
 @admin_bp.route("/drives", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_drives():
     try:
         status_filter = request.args.get("status")
@@ -565,6 +599,7 @@ def get_drives():
 
 @admin_bp.route("/drives/<int:drive_id>", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_drive(drive_id):
     try:
         drive = db.get_or_404(PlacementDrive, drive_id)
@@ -593,6 +628,8 @@ def get_drive(drive_id):
                 "applications": apps_data,
             },
         )
+    except NotFound:
+        raise
     except Exception as e:
         return error_response(str(e), 500)
 
@@ -607,6 +644,8 @@ def approve_drive(drive_id):
 
         drive.status = DriveStatus.APPROVED
         db.session.commit()
+        invalidate_drive_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Drive approved successfully",
@@ -632,6 +671,8 @@ def reject_drive(drive_id):
         drive.status = DriveStatus.REJECTED
         drive.rejection_reason = data["reason"]
         db.session.commit()
+        invalidate_drive_cache()
+        invalidate_application_cache()
 
         return success_response(
             "Drive rejected successfully",
@@ -648,6 +689,7 @@ def reject_drive(drive_id):
 
 @admin_bp.route("/applications", methods=["GET"])
 @admin_required
+@cache.cached(query_string=True)
 def get_applications():
     try:
         status_filter = request.args.get("status")

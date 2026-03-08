@@ -14,6 +14,12 @@ from src.constants import (
     UserRole,
 )
 from src.helpers.auth import company_required, get_current_company
+from src.helpers.cache import (
+    cache,
+    invalidate_application_cache,
+    invalidate_company_cache,
+    invalidate_drive_cache,
+)
 from src.helpers.utils import (
     error_response,
     parse_iso_datetime,
@@ -63,6 +69,7 @@ def register():
         )
         db.session.add(company)
         db.session.commit()
+        invalidate_company_cache()
 
         return success_response(
             "Registration successful. Awaiting admin approval.",
@@ -75,6 +82,7 @@ def register():
 
 @company_bp.route("/profile", methods=["GET"])
 @company_required
+@cache.cached(query_string=True)
 def get_profile():
     _, company = get_current_company()
     if not company:
@@ -120,6 +128,7 @@ def update_profile():
 
     try:
         db.session.commit()
+        invalidate_company_cache()
         return success_response("Profile updated successfully")
     except Exception:
         db.session.rollback()
@@ -170,6 +179,7 @@ def upload_logo():
     company.logo_filename = new_filename
     try:
         db.session.commit()
+        invalidate_company_cache()
         return success_response("Logo uploaded successfully")
     except Exception:
         db.session.rollback()
@@ -178,6 +188,7 @@ def upload_logo():
 
 @company_bp.route("/dashboard", methods=["GET"])
 @company_required
+@cache.cached(query_string=True)
 def get_dashboard():
     _, company = get_current_company()
 
@@ -187,7 +198,6 @@ def get_dashboard():
             {"approval_status": company.approval_status},
         )
 
-    # Single query: count by status per drive (fixes N+1)
     drive_stats = (
         db.session.query(
             PlacementDrive.id.label("drive_id"),
@@ -302,6 +312,7 @@ def create_drive():
         )
         db.session.add(drive)
         db.session.commit()
+        invalidate_drive_cache()
 
         return success_response(
             "Drive created successfully",
@@ -319,12 +330,12 @@ def create_drive():
 
 @company_bp.route("/drives", methods=["GET"])
 @company_required
+@cache.cached(query_string=True)
 def get_drives():
     _, company = get_current_company()
 
     status_filter = request.args.get("status")
 
-    # Single query: count by status per drive (fixes N+1)
     drive_stats = (
         db.session.query(
             PlacementDrive.id,
@@ -386,6 +397,7 @@ def get_drives():
 
 @company_bp.route("/drives/<int:drive_id>", methods=["GET"])
 @company_required
+@cache.cached(query_string=True)
 def get_drive(drive_id):
     _, company = get_current_company()
     drive = db.get_or_404(PlacementDrive, drive_id)
@@ -469,6 +481,7 @@ def edit_drive(drive_id):
 
     try:
         db.session.commit()
+        invalidate_drive_cache()
         return success_response("Drive updated successfully")
     except Exception:
         db.session.rollback()
@@ -487,6 +500,7 @@ def close_drive(drive_id):
     drive.status = DriveStatus.CLOSED
     try:
         db.session.commit()
+        invalidate_drive_cache()
         return success_response("Drive closed successfully")
     except Exception:
         db.session.rollback()
@@ -495,6 +509,7 @@ def close_drive(drive_id):
 
 @company_bp.route("/drives/<int:drive_id>/applications", methods=["GET"])
 @company_required
+@cache.cached(query_string=True)
 def get_drive_applications(drive_id):
     _, company = get_current_company()
     drive = db.get_or_404(PlacementDrive, drive_id)
@@ -568,6 +583,7 @@ def update_application_status(application_id):
 
     try:
         db.session.commit()
+        invalidate_application_cache()
         return success_response("Application status updated successfully")
     except Exception:
         db.session.rollback()
@@ -625,6 +641,7 @@ def update_application_interview(application_id):
 
     try:
         db.session.commit()
+        invalidate_application_cache()
         return success_response("Interview details updated successfully")
     except Exception:
         db.session.rollback()
@@ -636,6 +653,7 @@ def update_application_interview(application_id):
     methods=["GET"],
 )
 @company_required
+@cache.cached(query_string=True)
 def get_application_resume(application_id):
     _, company = get_current_company()
     app_record = db.get_or_404(Application, application_id)

@@ -15,6 +15,12 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-secret-key")
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 3600))
 
+    # --- Cache ---
+    CACHE_TYPE = "RedisCache"
+    CACHE_DEFAULT_TIMEOUT = 300
+    CACHE_KEY_PREFIX = "flask_cache_view/"
+    CACHE_REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
     # --- Celery ---
     CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://localhost:6379/0")

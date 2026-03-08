@@ -8,6 +8,7 @@ from .apis.auth import auth_bp
 from .apis.company import company_bp
 from .apis.student import student_bp
 from .config import Config
+from .helpers.cache import cache
 from .helpers.email import mail
 from .helpers.utils import create_admin
 from .jobs.celery_app import make_celery
@@ -21,6 +22,7 @@ def create_app():
     db.init_app(app)
     JWTManager(app)
     mail.init_app(app)
+    cache.init_app(app)
     app.celery = make_celery(app)
 
     app.register_blueprint(auth_bp)

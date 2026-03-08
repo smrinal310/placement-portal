@@ -14,6 +14,11 @@ from src.constants import (
     UserRole,
 )
 from src.helpers.auth import get_current_student, student_required
+from src.helpers.cache import (
+    cache,
+    invalidate_application_cache,
+    invalidate_student_cache,
+)
 from src.helpers.student_helpers import check_eligibility
 from src.helpers.utils import (
     error_response,
@@ -130,11 +135,9 @@ def register():
         return error_response(f"Registration failed: {e!s}", 500)
 
 
-# ─── Profile ─────────────────────────────────────────────────
-
-
 @student_bp.route("/profile", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def get_profile():
     user, student = get_current_student()
     if not student:
@@ -196,6 +199,7 @@ def update_profile():
 
     try:
         db.session.commit()
+        invalidate_student_cache()
         return success_response(
             "Profile updated successfully",
             _serialize_profile(student, user),
@@ -258,6 +262,7 @@ def upload_resume():
     student.resume_filename = new_filename
     try:
         db.session.commit()
+        invalidate_student_cache()
         return success_response(
             "Resume uploaded successfully",
             {"resume_filename": new_filename},
@@ -269,6 +274,7 @@ def upload_resume():
 
 @student_bp.route("/profile/resume", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def download_resume():
     _, student = get_current_student()
     if not student:
@@ -289,6 +295,7 @@ def download_resume():
 
 @student_bp.route("/dashboard", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def get_dashboard():
     user, student = get_current_student()
     if not student:
@@ -360,6 +367,7 @@ def get_dashboard():
 
 @student_bp.route("/drives", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def get_drives():
     _, student = get_current_student()
     if not student:
@@ -438,6 +446,7 @@ def get_drives():
 
 @student_bp.route("/drives/<int:drive_id>", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def get_drive_detail(drive_id):
     _, student = get_current_student()
     if not student:
@@ -554,6 +563,7 @@ def apply_to_drive(drive_id):
     db.session.add(application)
     try:
         db.session.commit()
+        invalidate_application_cache()
         return success_response(
             "Application submitted successfully.",
             {
@@ -575,6 +585,7 @@ def apply_to_drive(drive_id):
 
 @student_bp.route("/applications", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def get_applications():
     _, student = get_current_student()
     if not student:
@@ -621,6 +632,7 @@ def get_applications():
 
 @student_bp.route("/applications/<int:application_id>", methods=["GET"])
 @student_required
+@cache.cached(query_string=True)
 def get_application_detail(application_id):
     _, student = get_current_student()
     if not student:
