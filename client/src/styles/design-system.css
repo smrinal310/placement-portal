@@ -527,8 +527,24 @@ tr:hover td {
   background-color: var(--color-gray-100);
   color: var(--color-gray-600);
 }
+.badge-placed {
+  background-color: var(--color-info-light);
+  color: var(--color-info);
+}
 
-/* 7. Filter Select Utility */
+/* 7. Table Link Utility */
+.table-link {
+  cursor: pointer;
+  color: inherit;
+  transition: color var(--transition-fast);
+}
+.table-link:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 8. Filter Select Utility */
 .filter-select {
   flex: 0 0 160px;
   padding: var(--space-2) var(--space-3);

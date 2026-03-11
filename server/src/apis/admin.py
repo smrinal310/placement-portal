@@ -8,7 +8,7 @@ from src.constants import (
     ApprovalStatus,
     DriveStatus,
 )
-from src.helpers.auth import admin_required
+from src.helpers.auth import admin_required, roles_required
 from src.helpers.cache import (
     cache,
     invalidate_application_cache,
@@ -17,6 +17,7 @@ from src.helpers.cache import (
     invalidate_student_cache,
 )
 from src.helpers.utils import error_response, escape_like, success_response
+from src.jobs.tasks import send_monthly_placement_report
 from src.models import Application, Company, PlacementDrive, Student, User, db
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
@@ -68,84 +69,17 @@ def _get_recent_placements() -> list[dict]:
     return [
         {
             "student_name": app.student.full_name,
+            "student_id": app.student.id,
+            "student_branch": app.student.branch,
             "company_name": app.drive.company.company_name,
+            "company_id": app.drive.company.id,
+            "drive_id": app.drive.id,
             "role": app.drive.job_title,
             "package": app.drive.salary_package,
             "date": (app.updated_at.isoformat() if app.updated_at else None),
         }
         for app in recent
     ]
-
-
-def _get_recent_activity() -> list[dict]:
-    """Merge the 5 most-recent companies, drives, and applications."""
-    recent_companies = (
-        Company.query.order_by(Company.created_at.desc()).limit(5).all()
-    )
-    recent_drives = (
-        PlacementDrive.query.order_by(PlacementDrive.created_at.desc())
-        .limit(5)
-        .all()
-    )
-    recent_apps = (
-        Application.query.order_by(Application.created_at.desc())
-        .limit(5)
-        .all()
-    )
-
-    activities: list[dict] = []
-    for c in recent_companies:
-        activities.append(
-            {
-                "type": "company_registered",
-                "title": c.company_name,
-                "description": "Registered for campus drive.",
-                "timestamp": c.created_at,
-            }
-        )
-    for d in recent_drives:
-        activities.append(
-            {
-                "type": "drive_added",
-                "title": (
-                    d.company.company_name if d.company else "Unknown Company"
-                ),
-                "description": (f"New Placement Drive added: {d.job_title}."),
-                "timestamp": d.created_at,
-            }
-        )
-    for a in recent_apps:
-        action = (
-            "Applied for role"
-            if a.status == ApplicationStatus.APPLIED
-            else f"Application {a.status}"
-        )
-        if a.status == ApplicationStatus.SELECTED:
-            company_name = (
-                a.drive.company.company_name
-                if a.drive and a.drive.company
-                else "Company"
-            )
-            action = f"Accepted offer from {company_name}"
-        activities.append(
-            {
-                "type": "student_applied",
-                "title": (
-                    a.student.full_name if a.student else "Unknown Student"
-                ),
-                "description": action,
-                "timestamp": a.created_at,
-            }
-        )
-
-    activities.sort(key=lambda x: x["timestamp"], reverse=True)
-    result = activities[:5]
-
-    for act in result:
-        act["timestamp"] = (
-            act["timestamp"].isoformat() if act["timestamp"] else None
-        )
-    return result
 
 
 @admin_bp.route("/dashboard", methods=["GET"])
@@ -161,7 +95,6 @@ def get_dashboard():
                 "companies": _get_company_stats(),
                 "drives": _get_drive_stats(),
                 "recent_placements": _get_recent_placements(),
-                "recent_activity": _get_recent_activity(),
             },
         )
     except Exception as e:
@@ -236,18 +169,26 @@ def get_companies():
 
 
 @admin_bp.route("/companies/<int:company_id>", methods=["GET"])
-@admin_required
+@roles_required("admin", "student")
 @cache.cached(query_string=True)
 def get_company(company_id):
     try:
         company = db.get_or_404(Company, company_id)
 
+        user = company.user
         drives = PlacementDrive.query.filter_by(company_id=company.id).all()
         drives_data = [
             {
                 "id": d.id,
                 "job_title": d.job_title,
+                "job_type": d.job_type,
+                "salary_package": d.salary_package,
                 "status": d.status,
+                "application_deadline": (
+                    d.application_deadline.isoformat()
+                    if d.application_deadline
+                    else None
+                ),
             }
             for d in drives
         ]
@@ -257,9 +198,16 @@ def get_company(company_id):
             {
                 "id": company.id,
                 "company_name": company.company_name,
+                "hr_name": company.hr_name,
+                "hr_contact": company.hr_contact,
                 "website": company.website,
+                "industry": company.industry,
+                "description": company.description,
+                "address": company.address,
+                "logo_filename": company.logo_filename,
                 "approval_status": company.approval_status,
                 "rejection_reason": company.rejection_reason,
+                "account_status": user.account_status,
                 "drives": drives_data,
             },
         )
@@ -461,9 +409,30 @@ def get_student(student_id):
             "Student fetched successfully",
             {
                 "id": student.id,
+                "student_id": student.id,
                 "name": student.full_name,
+                "full_name": student.full_name,
+                "email": student.user.email if student.user else None,
+                "phone": student.phone,
                 "branch": student.branch,
-                "cgpa": student.cgpa,
+                "year": student.year,
+                "cgpa": float(student.cgpa)
+                if student.cgpa is not None
+                else None,
+                "gender": student.gender,
+                "date_of_birth": student.date_of_birth.isoformat()
+                if student.date_of_birth
+                else None,
+                "address": student.address,
+                "linkedin_url": student.linkedin_url,
+                "github_url": student.github_url,
+                "skills": student.skills,
+                "resume_filename": student.resume_filename,
+                "is_placed": student.is_placed,
+                "account_status": student.user.account_status
+                if student.user
+                else None,
+                "user_id": student.user_id,
                 "applications": apps_data,
             },
         )
@@ -622,10 +591,26 @@ def get_drive(drive_id):
             "Drive fetched successfully",
             {
                 "id": drive.id,
+                "company_id": drive.company_id,
                 "job_title": drive.job_title,
-                "company_name": drive.company.company_name,
+                "job_type": drive.job_type,
                 "description": drive.job_description,
+                "job_location": drive.job_location,
+                "salary_package": drive.salary_package,
+                "eligible_branches": drive.eligible_branches,
+                "min_cgpa": drive.min_cgpa,
+                "min_year": drive.min_year,
+                "max_year": drive.max_year,
+                "other_criteria": drive.other_criteria,
+                "application_deadline": (
+                    drive.application_deadline.isoformat()
+                    if drive.application_deadline
+                    else None
+                ),
+                "vacancy_count": drive.vacancy_count,
                 "status": drive.status,
+                "company_name": drive.company.company_name,
+                "company_description": drive.company.description,
                 "applications": apps_data,
             },
         )
@@ -718,10 +703,13 @@ def get_applications():
         result_data = [
             {
                 "id": app.id,
+                "student_id": app.student_id,
                 "student_name": app.student.full_name,
                 "student_branch": app.student.branch,
                 "student_year": app.student.year,
+                "drive_id": app.drive_id,
                 "drive_title": app.drive.job_title,
+                "company_id": app.drive.company_id,
                 "company_name": app.drive.company.company_name,
                 "status": app.status,
                 "applied_at": (
@@ -736,3 +724,13 @@ def get_applications():
         )
     except Exception as e:
         return error_response(str(e), 500)
+
+
+@admin_bp.route("/reports/generate", methods=["POST"])
+@admin_required
+def generate_report():
+    """Trigger monthly placement report generation asynchronously."""
+    send_monthly_placement_report.delay()
+    return success_response(
+        "Report generation started. You will receive it via email shortly."
+    )

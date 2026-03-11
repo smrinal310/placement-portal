@@ -93,7 +93,7 @@ export const validateFileType = (file, allowedExtensions) => {
   }
   const extension = `.${extMatch[1]}`.toLowerCase()
   const isAllowed = allowedExtensions.some(ext => ext.toLowerCase() === extension)
-  
+
   if (!isAllowed) {
     return { valid: false, message: 'File type not allowed' }
   }

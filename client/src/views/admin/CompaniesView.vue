@@ -68,7 +68,7 @@
                   <div class="companies__name-cell">
                     <AppAvatar :name="company.company_name" size="sm" />
                     <div>
-                      <div class="companies__company-name">{{ company.company_name }}</div>
+                      <div class="companies__company-name table-link" @click="router.push('/admin/companies/' + company.id)">{{ company.company_name }}</div>
                       <div class="companies__company-email">{{ company.email }}</div>
                     </div>
                   </div>
@@ -90,80 +90,49 @@
                 </td>
                 <td>
                   <div class="companies__actions">
-                    <template v-if="company.approval_status === ApprovalStatus.PENDING">
-                      <button
-                        class="companies__action-btn companies__action-btn--success"
-                        title="Approve"
-                        @click="openModal('approve', company)"
-                      >
-                        <i class="bi bi-check-circle-fill"></i>
-                      </button>
-                      <button
-                        class="companies__action-btn companies__action-btn--danger"
-                        title="Reject"
-                        @click="openModal('reject', company)"
-                      >
-                        <i class="bi bi-x-circle-fill"></i>
-                      </button>
+                    <div class="companies__kebab-wrap" :ref="el => setKebabRef(el, company.id)">
                       <button
                         class="companies__action-btn"
-                        title="View"
-                        @click="router.push('/admin/companies/' + company.id)"
+                        title="More actions"
+                        @click.stop="toggleKebab(company.id, $event)"
                       >
-                        <i class="bi bi-eye"></i>
+                        <i class="bi bi-three-dots-vertical"></i>
                       </button>
-                    </template>
-
-                    <template v-else-if="company.approval_status === ApprovalStatus.APPROVED">
-                      <button
-                        class="companies__action-btn"
-                        title="View"
-                        @click="router.push('/admin/companies/' + company.id)"
-                      >
-                        <i class="bi bi-eye"></i>
-                      </button>
-                      <button
-                        v-if="company.account_status !== AccountStatus.BLACKLISTED"
-                        class="companies__action-btn companies__action-btn--danger"
-                        title="Blacklist"
-                        @click="openModal('blacklist', company)"
-                      >
-                        <i class="bi bi-slash-circle"></i>
-                      </button>
-                      <button
-                        v-if="company.account_status === AccountStatus.BLACKLISTED"
-                        class="companies__action-btn companies__action-btn--success"
-                        title="Activate"
-                        @click="openModal('activate', company)"
-                      >
-                        <i class="bi bi-check-circle"></i>
-                      </button>
-                    </template>
-
-                    <template v-else-if="company.approval_status === ApprovalStatus.REJECTED">
-                      <button
-                        class="companies__action-btn"
-                        title="View"
-                        @click="router.push('/admin/companies/' + company.id)"
-                      >
-                        <i class="bi bi-eye"></i>
-                      </button>
-                    </template>
+                      <div v-if="openKebabId === company.id" class="companies__kebab-menu" :style="menuStyle">
+                        <button class="companies__kebab-item" @click="navigateAndClose('/admin/companies/' + company.id)">
+                          View Profile
+                        </button>
+                        <template v-if="company.approval_status === ApprovalStatus.PENDING">
+                          <button class="companies__kebab-item companies__kebab-item--success" @click="openModalAndClose('approve', company)">
+                            Approve Company
+                          </button>
+                          <button class="companies__kebab-item companies__kebab-item--danger" @click="openModalAndClose('reject', company)">
+                            Reject Company
+                          </button>
+                        </template>
+                        <template v-else-if="company.approval_status === ApprovalStatus.APPROVED">
+                          <button
+                            v-if="company.account_status !== AccountStatus.BLACKLISTED"
+                            class="companies__kebab-item companies__kebab-item--danger"
+                            @click="openModalAndClose('blacklist', company)"
+                          >
+                            Blacklist Company
+                          </button>
+                          <button
+                            v-else
+                            class="companies__kebab-item companies__kebab-item--success"
+                            @click="openModalAndClose('activate', company)"
+                          >
+                            Activate Company
+                          </button>
+                        </template>
+                      </div>
+                    </div>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <div class="companies__pagination">
-          <AppPagination
-            variant="text"
-            :total="adminStore.companiesTotal"
-            :perPage="10"
-            :currentPage="adminStore.companyFilters.page"
-            @page-change="(page) => adminStore.fetchCompanies({ page })"
-          />
         </div>
       </template>
     </div>
@@ -279,8 +248,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { formatDate } from '@/utils/formatters'
 import { ApprovalStatus, AccountStatus } from '@/utils/constants'
@@ -291,10 +260,10 @@ import AppBadge from '@/components/common/AppBadge.vue'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import AppPagination from '@/components/common/AppPagination.vue'
 import AppModal from '@/components/common/AppModal.vue'
 
 const router = useRouter()
+const route = useRoute()
 const adminStore = useAdminStore()
 
 const searchQuery = ref('')
@@ -302,6 +271,46 @@ const selectedStatus = ref('')
 const feedbackMessage = ref('')
 const feedbackType = ref('success')
 const rejectError = ref('')
+
+const openKebabId = ref(null)
+const menuStyle = ref({})
+const kebabRefs = {}
+
+const setKebabRef = (el, id) => {
+  if (el) kebabRefs[id] = el
+  else delete kebabRefs[id]
+}
+
+const toggleKebab = (id, event) => {
+  if (openKebabId.value === id) {
+    openKebabId.value = null
+    return
+  }
+  const rect = event.currentTarget.getBoundingClientRect()
+  const right = window.innerWidth - rect.right
+  if (window.innerHeight - rect.bottom < 150) {
+    menuStyle.value = { bottom: (window.innerHeight - rect.top) + 'px', right: right + 'px', top: 'auto' }
+  } else {
+    menuStyle.value = { top: rect.bottom + 'px', right: right + 'px', bottom: 'auto' }
+  }
+  openKebabId.value = id
+}
+
+const openModalAndClose = (type, company) => {
+  openKebabId.value = null
+  openModal(type, company)
+}
+
+const navigateAndClose = (path) => {
+  openKebabId.value = null
+  router.push(path)
+}
+
+const handleOutsideClick = (e) => {
+  if (openKebabId.value === null) return
+  const el = kebabRefs[openKebabId.value]
+  if (el && !el.contains(e.target)) openKebabId.value = null
+}
 
 const modalState = reactive({
   show: false,
@@ -404,7 +413,15 @@ watch(searchQuery, () => {
 })
 
 onMounted(() => {
+  if (route.query.status) {
+    selectedStatus.value = route.query.status
+  }
   loadCompanies()
+  document.addEventListener('click', handleOutsideClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleOutsideClick)
 })
 </script>
 
@@ -448,11 +465,6 @@ onMounted(() => {
 
 .companies__table-wrap {
   overflow-x: auto;
-}
-
-.companies__pagination {
-  padding: var(--space-4) var(--space-6);
-  border-top: var(--border-width) solid var(--border-color);
 }
 
 .companies__name-cell {
@@ -532,6 +544,48 @@ onMounted(() => {
 .companies__action-btn--danger:hover {
   background-color: var(--color-danger-light);
   color: var(--color-danger);
+}
+
+.companies__kebab-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.companies__kebab-menu {
+  position: fixed;
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 160px;
+  z-index: 1000;
+}
+
+.companies__kebab-item {
+  display: block;
+  width: 100%;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast);
+  outline: none;
+}
+
+.companies__kebab-item:hover {
+  background: var(--color-gray-50);
+}
+
+.companies__kebab-item--danger {
+  color: var(--color-danger);
+}
+
+.companies__kebab-item--success {
+  color: var(--color-success);
 }
 
 .companies__modal-summary {

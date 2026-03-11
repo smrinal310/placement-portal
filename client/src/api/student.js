@@ -14,6 +14,10 @@ export const downloadResume = (filename) => downloadFile('/api/student/profile/r
 
 export const getDashboard = () => api.get('/api/student/dashboard')
 
+// ── COMPANIES ──
+
+export const getCompany = (id) => api.get(`/api/admin/companies/${id}`)
+
 // ── DRIVES ──
 
 export const getDrives = (params) => api.get('/api/student/drives', { params })
@@ -25,8 +29,6 @@ export const applyToDrive = (id) => api.post(`/api/student/drives/${id}/apply`)
 // ── APPLICATIONS ──
 
 export const getApplications = (params) => api.get('/api/student/applications', { params })
-
-export const getApplication = (id) => api.get(`/api/student/applications/${id}`)
 
 // ── EXPORT ──
 

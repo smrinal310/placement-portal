@@ -1,81 +1,75 @@
 <template>
-  <div class="admin-layout">
+  <div class="company-layout">
 
     <!-- Mobile Overlay -->
-    <div v-if="isSidebarOpen" class="admin-layout__overlay" @click="isSidebarOpen = false"></div>
+    <div v-if="isSidebarOpen" class="company-layout__overlay" @click="isSidebarOpen = false"></div>
 
     <!-- Sidebar -->
-    <aside class="admin-layout__sidebar" :class="{ 'admin-layout__sidebar--open': isSidebarOpen }">
-      <div class="admin-layout__logo">
-        <span class="admin-layout__logo-title">PlacementPortal</span>
-        <span class="admin-layout__logo-sub">Admin Panel</span>
+    <aside class="company-layout__sidebar" :class="{ 'company-layout__sidebar--open': isSidebarOpen }">
+      <div class="company-layout__logo">
+        <span class="company-layout__logo-title">PlacementPortal</span>
+        <span class="company-layout__logo-sub">Company Panel</span>
       </div>
 
-      <nav class="admin-layout__nav">
-        <RouterLink to="/admin/dashboard" class="admin-layout__nav-item" active-class="nav-item--active"
+      <nav class="company-layout__nav">
+        <RouterLink to="/company/dashboard" class="company-layout__nav-item" active-class="nav-item--active"
           @click="isSidebarOpen = false">
           <i class="bi bi-grid-fill"></i>
           <span>Dashboard</span>
         </RouterLink>
 
-        <RouterLink to="/admin/companies" class="admin-layout__nav-item" active-class="nav-item--active"
-          @click="isSidebarOpen = false">
-          <i class="bi bi-buildings"></i>
-          <span>Companies</span>
-        </RouterLink>
-
-        <RouterLink to="/admin/students" class="admin-layout__nav-item" active-class="nav-item--active"
-          @click="isSidebarOpen = false">
-          <i class="bi bi-person-lines-fill"></i>
-          <span>Students</span>
-        </RouterLink>
-
-        <RouterLink to="/admin/drives" class="admin-layout__nav-item" active-class="nav-item--active"
+        <RouterLink to="/company/drives" class="company-layout__nav-item" active-class="nav-item--active"
+          :class="{ 'nav-item--active': isDrivesActive }"
           @click="isSidebarOpen = false">
           <i class="bi bi-briefcase-fill"></i>
-          <span>Placement Drives</span>
+          <span>My Drives</span>
         </RouterLink>
 
-        <RouterLink to="/admin/applications" class="admin-layout__nav-item" active-class="nav-item--active"
+        <RouterLink to="/company/profile" class="company-layout__nav-item" active-class="nav-item--active"
           @click="isSidebarOpen = false">
-          <i class="bi bi-file-text-fill"></i>
-          <span>All Applications</span>
+          <i class="bi bi-building"></i>
+          <span>Company Profile</span>
         </RouterLink>
+
+
       </nav>
 
-      <div class="admin-layout__profile">
-        <div class="admin-layout__profile-info">
-          <AppAvatar size="sm" :name="authStore.user?.name || 'User'" />
-          <div class="admin-layout__profile-text">
-            <span class="admin-layout__profile-name">{{ authStore.user?.name || 'User' }}</span>
-            <span class="admin-layout__profile-role">{{ authStore.user?.role || 'Admin' }}</span>
+      <div class="company-layout__profile">
+        <div class="company-layout__profile-info">
+          <AppAvatar size="sm" :name="authStore.user?.name || 'Company'" />
+          <div class="company-layout__profile-text">
+            <span class="company-layout__profile-name">{{ authStore.user?.name || 'Company' }}</span>
+            <span class="company-layout__profile-role">company</span>
           </div>
         </div>
-        <button class="admin-layout__logout" @click="handleLogout" aria-label="Logout">
+        <button class="company-layout__logout" @click="handleLogout" aria-label="Logout">
           <i class="bi bi-box-arrow-right"></i>
         </button>
       </div>
     </aside>
 
     <!-- Mobile toggle (visible only on small screens) -->
-    <button class="admin-layout__mobile-toggle" @click="isSidebarOpen = true" aria-label="Open menu">
+    <button class="company-layout__mobile-toggle" @click="isSidebarOpen = true" aria-label="Open menu">
       <i class="bi bi-list"></i>
     </button>
 
     <!-- Page Content -->
-    <main class="admin-layout__content">
+    <main class="company-layout__content">
       <RouterView />
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import AppAvatar from '../components/common/AppAvatar.vue'
+import AppAvatar from '@/components/common/AppAvatar.vue'
 
 const router = useRouter()
+const route = useRoute()
+
+const isDrivesActive = computed(() => route.path.startsWith('/company/drives'))
 const authStore = useAuthStore()
 
 const isSidebarOpen = ref(false)
@@ -87,22 +81,21 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
-.admin-layout {
+.company-layout {
   display: flex;
   min-height: 100vh;
   background-color: var(--color-content-bg);
 }
 
-.admin-layout__overlay {
+.company-layout__overlay {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.3);
   z-index: 40;
-  /* Between content and sidebar */
 }
 
-/* Sidebar Styles */
-.admin-layout__sidebar {
+/* ── Sidebar ── */
+.company-layout__sidebar {
   position: fixed;
   top: 0;
   left: 0;
@@ -116,7 +109,7 @@ const handleLogout = async () => {
   transition: transform var(--transition-base);
 }
 
-.admin-layout__logo {
+.company-layout__logo {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -127,7 +120,7 @@ const handleLogout = async () => {
   border-bottom: var(--border-width) solid var(--color-border);
 }
 
-.admin-layout__logo-title {
+.company-layout__logo-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
@@ -135,13 +128,13 @@ const handleLogout = async () => {
   letter-spacing: -0.02em;
 }
 
-.admin-layout__logo-sub {
+.company-layout__logo-sub {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   line-height: 1;
 }
 
-.admin-layout__nav {
+.company-layout__nav {
   flex-grow: 1;
   overflow-y: auto;
   padding: var(--space-3);
@@ -150,7 +143,7 @@ const handleLogout = async () => {
   gap: 2px;
 }
 
-.admin-layout__nav-item {
+.company-layout__nav-item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -164,14 +157,14 @@ const handleLogout = async () => {
   font-weight: var(--font-weight-medium);
 }
 
-.admin-layout__nav-item i {
+.company-layout__nav-item i {
   font-size: var(--font-size-md);
   width: 20px;
   text-align: center;
   flex-shrink: 0;
 }
 
-.admin-layout__nav-item:hover {
+.company-layout__nav-item:hover {
   background-color: var(--color-gray-100);
   color: var(--color-text-primary);
 }
@@ -187,7 +180,7 @@ const handleLogout = async () => {
   color: var(--color-primary);
 }
 
-.admin-layout__profile {
+.company-layout__profile {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -197,30 +190,31 @@ const handleLogout = async () => {
   flex-shrink: 0;
 }
 
-.admin-layout__profile-info {
+.company-layout__profile-info {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
-.admin-layout__profile-text {
+.company-layout__profile-text {
   display: flex;
   flex-direction: column;
 }
 
-.admin-layout__profile-name {
+.company-layout__profile-name {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   line-height: var(--line-height-tight);
 }
 
-.admin-layout__profile-role {
+.company-layout__profile-role {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+  text-transform: capitalize;
 }
 
-.admin-layout__logout {
+.company-layout__logout {
   background: none;
   border: none;
   color: var(--color-text-muted);
@@ -237,13 +231,13 @@ const handleLogout = async () => {
   height: 32px;
 }
 
-.admin-layout__logout:hover {
+.company-layout__logout:hover {
   background-color: var(--color-danger-light);
   color: var(--color-danger);
 }
 
-/* Main Content */
-.admin-layout__content {
+/* ── Main Content ── */
+.company-layout__content {
   flex-grow: 1;
   margin-left: var(--sidebar-width);
   min-height: 100vh;
@@ -251,7 +245,7 @@ const handleLogout = async () => {
 }
 
 /* Mobile toggle */
-.admin-layout__mobile-toggle {
+.company-layout__mobile-toggle {
   display: none;
   position: fixed;
   top: var(--space-3);
@@ -270,22 +264,22 @@ const handleLogout = async () => {
   box-shadow: var(--shadow-sm);
 }
 
-/* Mobile Breakpoint */
+/* ── Mobile ── */
 @media (max-width: 768px) {
-  .admin-layout__sidebar {
+  .company-layout__sidebar {
     transform: translateX(-100%);
   }
 
-  .admin-layout__sidebar--open {
+  .company-layout__sidebar--open {
     transform: translateX(0);
   }
 
-  .admin-layout__content {
+  .company-layout__content {
     margin-left: 0;
     padding-top: calc(var(--space-3) + 36px + var(--space-3));
   }
 
-  .admin-layout__mobile-toggle {
+  .company-layout__mobile-toggle {
     display: flex;
   }
 }

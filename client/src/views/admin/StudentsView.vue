@@ -71,7 +71,7 @@
                 <td>
                   <div class="students__name-cell">
                     <AppAvatar :name="student.name" size="sm" />
-                    <div class="students__student-name">{{ student.name }}</div>
+                    <div class="students__student-name table-link" @click="router.push('/admin/students/' + student.id)">{{ student.name }}</div>
                   </div>
                 </td>
                 <td>{{ student.email }}</td>
@@ -81,49 +81,44 @@
                 <td>
                   <div class="students__status-cell">
                     <AppBadge :status="student.account_status" />
-                    <span v-if="student.is_placed" class="students__placed-tag">Placed</span>
+                    <AppBadge v-if="student.is_placed" status="placed" />
                   </div>
                 </td>
                 <td>
                   <div class="students__actions">
-                    <button
-                      class="students__action-btn"
-                      title="View"
-                      @click="router.push('/admin/students/' + student.id)"
-                    >
-                      <i class="bi bi-eye"></i>
-                    </button>
-                    <button
-                      v-if="student.account_status === AccountStatus.ACTIVE"
-                      class="students__action-btn students__action-btn--danger"
-                      title="Blacklist"
-                      @click="openModal('blacklist', student)"
-                    >
-                      <i class="bi bi-slash-circle"></i>
-                    </button>
-                    <button
-                      v-if="student.account_status === AccountStatus.BLACKLISTED"
-                      class="students__action-btn students__action-btn--success"
-                      title="Activate"
-                      @click="openModal('activate', student)"
-                    >
-                      <i class="bi bi-check-circle"></i>
-                    </button>
+                    <div class="students__kebab-wrap" :ref="el => setKebabRef(el, student.id)">
+                      <button
+                        class="students__action-btn"
+                        title="More actions"
+                        @click.stop="toggleKebab(student.id, $event)"
+                      >
+                        <i class="bi bi-three-dots-vertical"></i>
+                      </button>
+                      <div v-if="openKebabId === student.id" class="students__kebab-menu" :style="menuStyle">
+                        <button class="students__kebab-item" @click="navigateAndClose('/admin/students/' + student.id)">
+                          View Profile
+                        </button>
+                        <button
+                          v-if="student.account_status === AccountStatus.ACTIVE"
+                          class="students__kebab-item students__kebab-item--danger"
+                          @click="openModalAndClose('blacklist', student)"
+                        >
+                          Blacklist Student
+                        </button>
+                        <button
+                          v-else-if="student.account_status === AccountStatus.BLACKLISTED"
+                          class="students__kebab-item students__kebab-item--success"
+                          @click="openModalAndClose('activate', student)"
+                        >
+                          Activate Student
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <div class="students__pagination">
-          <AppPagination
-            variant="text"
-            :total="adminStore.studentsTotal"
-            :perPage="10"
-            :currentPage="adminStore.studentFilters.page"
-            @page-change="(page) => adminStore.fetchStudents({ page })"
-          />
         </div>
       </template>
     </div>
@@ -181,7 +176,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { formatCGPA } from '@/utils/formatters'
@@ -192,7 +187,6 @@ import AppBadge from '@/components/common/AppBadge.vue'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import AppPagination from '@/components/common/AppPagination.vue'
 import AppModal from '@/components/common/AppModal.vue'
 
 const router = useRouter()
@@ -203,6 +197,46 @@ const selectedBranch = ref('')
 const selectedYear = ref('')
 const feedbackMessage = ref('')
 const feedbackType = ref('success')
+
+const openKebabId = ref(null)
+const menuStyle = ref({})
+const kebabRefs = {}
+
+const setKebabRef = (el, id) => {
+  if (el) kebabRefs[id] = el
+  else delete kebabRefs[id]
+}
+
+const toggleKebab = (id, event) => {
+  if (openKebabId.value === id) {
+    openKebabId.value = null
+    return
+  }
+  const rect = event.currentTarget.getBoundingClientRect()
+  const right = window.innerWidth - rect.right
+  if (window.innerHeight - rect.bottom < 150) {
+    menuStyle.value = { bottom: (window.innerHeight - rect.top) + 'px', right: right + 'px', top: 'auto' }
+  } else {
+    menuStyle.value = { top: rect.bottom + 'px', right: right + 'px', bottom: 'auto' }
+  }
+  openKebabId.value = id
+}
+
+const openModalAndClose = (type, student) => {
+  openKebabId.value = null
+  openModal(type, student)
+}
+
+const navigateAndClose = (path) => {
+  openKebabId.value = null
+  router.push(path)
+}
+
+const handleOutsideClick = (e) => {
+  if (openKebabId.value === null) return
+  const el = kebabRefs[openKebabId.value]
+  if (el && !el.contains(e.target)) openKebabId.value = null
+}
 
 const modalState = reactive({
   show: false,
@@ -280,6 +314,11 @@ watch(searchQuery, () => {
 
 onMounted(() => {
   loadStudents()
+  document.addEventListener('click', handleOutsideClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleOutsideClick)
 })
 </script>
 
@@ -325,11 +364,6 @@ onMounted(() => {
   overflow-x: auto;
 }
 
-.students__pagination {
-  padding: var(--space-4) var(--space-6);
-  border-top: var(--border-width) solid var(--border-color);
-}
-
 .students__name-cell {
   display: flex;
   align-items: center;
@@ -349,11 +383,6 @@ onMounted(() => {
   align-items: flex-start;
 }
 
-.students__placed-tag {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-success);
-}
 
 .students__actions {
   display: flex;
@@ -397,6 +426,48 @@ onMounted(() => {
 .students__action-btn--danger:hover {
   background-color: var(--color-danger-light);
   color: var(--color-danger);
+}
+
+.students__kebab-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.students__kebab-menu {
+  position: fixed;
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 160px;
+  z-index: 1000;
+}
+
+.students__kebab-item {
+  display: block;
+  width: 100%;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast);
+  outline: none;
+}
+
+.students__kebab-item:hover {
+  background: var(--color-gray-50);
+}
+
+.students__kebab-item--danger {
+  color: var(--color-danger);
+}
+
+.students__kebab-item--success {
+  color: var(--color-success);
 }
 
 .students__modal-summary {

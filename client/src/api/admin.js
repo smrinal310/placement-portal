@@ -41,3 +41,7 @@ export const rejectDrive = (id, data) => api.patch(`/api/admin/drives/${id}/reje
 // ── APPLICATIONS ──
 
 export const getApplications = (params) => api.get('/api/admin/applications', { params })
+
+// ── REPORTS ──
+
+export const generateReport = () => api.post('/api/admin/reports/generate')

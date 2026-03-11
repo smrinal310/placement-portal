@@ -1,5 +1,5 @@
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from flask import Blueprint, current_app, request, send_from_directory, url_for
 from sqlalchemy import or_
@@ -18,6 +18,7 @@ from src.helpers.cache import (
     cache,
     invalidate_application_cache,
     invalidate_student_cache,
+    make_user_cache_key,
 )
 from src.helpers.student_helpers import check_eligibility
 from src.helpers.utils import (
@@ -31,6 +32,7 @@ from src.models import (
     Application,
     Company,
     ExportJob,
+    Notification,
     PlacementDrive,
     Student,
     User,
@@ -137,7 +139,7 @@ def register():
 
 @student_bp.route("/profile", methods=["GET"])
 @student_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_profile():
     user, student = get_current_student()
     if not student:
@@ -169,6 +171,7 @@ def update_profile():
         "linkedin_url",
         "github_url",
         "skills",
+        "branch",
         "year",
         "cgpa",
     ]
@@ -192,6 +195,19 @@ def update_profile():
         if not (1 <= year <= 4):
             return error_response("year must be between 1 and 4")
         data["year"] = year
+
+    # Parse date_of_birth string to a date object
+    if "date_of_birth" in data and data["date_of_birth"]:
+        try:
+            dob = data["date_of_birth"]
+            if isinstance(dob, str):
+                data["date_of_birth"] = date.fromisoformat(dob)
+        except ValueError:
+            return error_response(
+                "date_of_birth must be a valid ISO date (YYYY-MM-DD)"
+            )
+    elif "date_of_birth" in data and not data["date_of_birth"]:
+        data["date_of_birth"] = None
 
     for field in allowed_updates:
         if field in data:
@@ -274,7 +290,7 @@ def upload_resume():
 
 @student_bp.route("/profile/resume", methods=["GET"])
 @student_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def download_resume():
     _, student = get_current_student()
     if not student:
@@ -295,7 +311,7 @@ def download_resume():
 
 @student_bp.route("/dashboard", methods=["GET"])
 @student_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_dashboard():
     user, student = get_current_student()
     if not student:
@@ -340,6 +356,32 @@ def get_dashboard():
             )
     upcoming.sort(key=lambda x: x["interview_date"])
 
+    # Shortlisted drives and interview invites
+    shortlisted_drives = []
+    for app in applications:
+        if (
+            app.status == ApplicationStatus.SHORTLISTED
+            or app.interview_date is not None
+        ):
+            drive = app.drive
+            shortlisted_drives.append(
+                {
+                    "application_id": app.id,
+                    "drive_id": drive.id,
+                    "job_title": drive.job_title,
+                    "company_name": drive.company.company_name,
+                    "job_type": drive.job_type,
+                    "status": app.status,
+                    "interview_date": (
+                        app.interview_date.isoformat()
+                        if app.interview_date
+                        else None
+                    ),
+                    "interview_mode": app.interview_mode,
+                    "interview_link": app.interview_link,
+                }
+            )
+
     # Eligible drives not yet applied to
     applied_drive_ids = {app.drive_id for app in applications}
     eligible_drives = PlacementDrive.query.filter(
@@ -360,6 +402,7 @@ def get_dashboard():
             "total_applications": total_applications,
             "applications_breakdown": breakdown,
             "upcoming_interviews": upcoming,
+            "shortlisted_drives": shortlisted_drives,
             "eligible_drives_not_applied": (eligible_not_applied),
         },
     )
@@ -367,7 +410,7 @@ def get_dashboard():
 
 @student_bp.route("/drives", methods=["GET"])
 @student_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_drives():
     _, student = get_current_student()
     if not student:
@@ -446,7 +489,7 @@ def get_drives():
 
 @student_bp.route("/drives/<int:drive_id>", methods=["GET"])
 @student_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_drive_detail(drive_id):
     _, student = get_current_student()
     if not student:
@@ -508,6 +551,8 @@ def get_drive_detail(drive_id):
             drive.result_date.isoformat() if drive.result_date else None
         ),
         "vacancy_count": drive.vacancy_count,
+        "status": drive.status,
+        "company_id": company.id,
         "company_name": company.company_name,
         "company_website": company.website,
         "company_industry": company.industry,
@@ -585,7 +630,7 @@ def apply_to_drive(drive_id):
 
 @student_bp.route("/applications", methods=["GET"])
 @student_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_applications():
     _, student = get_current_student()
     if not student:
@@ -610,7 +655,9 @@ def get_applications():
             "application_id": app.id,
             "drive_id": app.drive.id,
             "job_title": app.drive.job_title,
+            "company_id": app.drive.company_id,
             "company_name": app.drive.company.company_name,
+            "company_logo": app.drive.company.logo_filename,
             "job_type": app.drive.job_type,
             "salary_package": app.drive.salary_package,
             "status": app.status,
@@ -628,69 +675,6 @@ def get_applications():
     ]
 
     return success_response("Applications fetched", result)
-
-
-@student_bp.route("/applications/<int:application_id>", methods=["GET"])
-@student_required
-@cache.cached(query_string=True)
-def get_application_detail(application_id):
-    _, student = get_current_student()
-    if not student:
-        return error_response("Student profile not found", 404)
-
-    application = db.session.get(Application, application_id)
-    if not application:
-        return error_response("Application not found", 404)
-
-    if application.student_id != student.id:
-        return error_response("Access denied", 403)
-
-    drive = application.drive
-    company = drive.company
-
-    data = {
-        "application_id": application.id,
-        "status": application.status,
-        "applied_at": (
-            application.applied_at.isoformat()
-            if application.applied_at
-            else None
-        ),
-        "interview_date": (
-            application.interview_date.isoformat()
-            if application.interview_date
-            else None
-        ),
-        "interview_mode": application.interview_mode,
-        "interview_link": application.interview_link,
-        "company_remarks": application.company_remarks,
-        "offer_letter_url": application.offer_letter_url,
-        "drive": {
-            "drive_id": drive.id,
-            "job_title": drive.job_title,
-            "job_description": drive.job_description,
-            "job_location": drive.job_location,
-            "job_type": drive.job_type,
-            "salary_package": drive.salary_package,
-            "application_deadline": (
-                drive.application_deadline.isoformat()
-                if drive.application_deadline
-                else None
-            ),
-            "drive_date": (
-                drive.drive_date.isoformat() if drive.drive_date else None
-            ),
-            "vacancy_count": drive.vacancy_count,
-        },
-        "company": {
-            "company_name": company.company_name,
-            "website": company.website,
-            "industry": company.industry,
-            "logo_filename": company.logo_filename,
-        },
-    }
-
-    return success_response("Application fetched", data)
 
 
 @student_bp.route("/applications/export", methods=["POST"])
@@ -796,3 +780,60 @@ def download_export(job_id):
         export_job.file_path,
         as_attachment=True,
     )
+
+
+@student_bp.route("/notifications", methods=["GET"])
+@student_required
+def get_notifications():
+    user, _ = get_current_student()
+    unread_only = request.args.get("unread_only", "false").lower() == "true"
+    query = Notification.query.filter_by(user_id=user.id).order_by(
+        Notification.created_at.desc()
+    )
+    if unread_only:
+        query = query.filter_by(is_read=False)
+    notifications = query.limit(20).all()
+    unread_count = Notification.query.filter_by(
+        user_id=user.id, is_read=False
+    ).count()
+    result = [
+        {
+            "id": n.id,
+            "title": n.title,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        }
+        for n in notifications
+    ]
+    return success_response(
+        "Notifications fetched",
+        {"notifications": result, "unread_count": unread_count},
+    )
+
+
+@student_bp.route(
+    "/notifications/<int:notification_id>/read", methods=["PATCH"]
+)
+@student_required
+def mark_notification_read(notification_id):
+    user, _ = get_current_student()
+    notification = db.session.get(Notification, notification_id)
+    if not notification:
+        return error_response("Notification not found", 404)
+    if notification.user_id != user.id:
+        return error_response("Access denied", 403)
+    notification.is_read = True
+    db.session.commit()
+    return success_response("Notification marked as read")
+
+
+@student_bp.route("/notifications/read-all", methods=["PATCH"])
+@student_required
+def mark_all_notifications_read():
+    user, _ = get_current_student()
+    Notification.query.filter_by(user_id=user.id, is_read=False).update(
+        {"is_read": True}
+    )
+    db.session.commit()
+    return success_response("All notifications marked as read")

@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import UTC, datetime
 
 from flask import Blueprint, current_app, request, send_from_directory
@@ -19,6 +20,7 @@ from src.helpers.cache import (
     invalidate_application_cache,
     invalidate_company_cache,
     invalidate_drive_cache,
+    make_user_cache_key,
 )
 from src.helpers.utils import (
     error_response,
@@ -26,7 +28,15 @@ from src.helpers.utils import (
     success_response,
     validate_file,
 )
-from src.models import Application, Company, PlacementDrive, User, db
+from src.models import (
+    Application,
+    Company,
+    Notification,
+    PlacementDrive,
+    Student,
+    User,
+    db,
+)
 
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
 
@@ -82,7 +92,7 @@ def register():
 
 @company_bp.route("/profile", methods=["GET"])
 @company_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_profile():
     _, company = get_current_company()
     if not company:
@@ -163,7 +173,7 @@ def upload_logo():
         return error_response("File exceeds maximum size of 2MB")
 
     filename = secure_filename(file.filename)
-    new_filename = f"{company.id}_{filename}"
+    new_filename = f"{company.id}_{int(time.time())}_{filename}"
     upload_folder = os.path.join(
         current_app.root_path,
         "..",
@@ -172,6 +182,12 @@ def upload_logo():
         "logos",
     )
     os.makedirs(upload_folder, exist_ok=True)
+
+    # Remove old logo file to avoid stale files
+    if company.logo_filename:
+        old_path = os.path.join(upload_folder, company.logo_filename)
+        if os.path.isfile(old_path):
+            os.remove(old_path)
 
     file_path = os.path.join(upload_folder, new_filename)
     file.save(file_path)
@@ -188,7 +204,7 @@ def upload_logo():
 
 @company_bp.route("/dashboard", methods=["GET"])
 @company_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_dashboard():
     _, company = get_current_company()
 
@@ -202,6 +218,8 @@ def get_dashboard():
         db.session.query(
             PlacementDrive.id.label("drive_id"),
             PlacementDrive.job_title,
+            PlacementDrive.job_type,
+            PlacementDrive.salary_package,
             PlacementDrive.status,
             PlacementDrive.application_deadline,
             func.count(Application.id).label("applicant_count"),
@@ -232,6 +250,8 @@ def get_dashboard():
         {
             "drive_id": row.drive_id,
             "job_title": row.job_title,
+            "job_type": row.job_type,
+            "salary_package": row.salary_package,
             "status": row.status,
             "applicant_count": row.applicant_count,
             "shortlisted_count": row.shortlisted_count,
@@ -249,6 +269,9 @@ def get_dashboard():
         "Dashboard fetched",
         {
             "approval_status": company.approval_status,
+            "company_name": company.company_name,
+            "company_description": company.description,
+            "company_logo": company.logo_filename,
             "total_drives": len(drive_data),
             "drives": drive_data,
         },
@@ -293,6 +316,13 @@ def create_drive():
     try:
         drive_date = parse_iso_datetime(data.get("drive_date"))
 
+        raw_branches = data.get("eligible_branches")
+        eligible_branches_str = (
+            ",".join(raw_branches)
+            if isinstance(raw_branches, list)
+            else raw_branches
+        )
+
         drive = PlacementDrive(
             company_id=company.id,
             job_title=data["job_title"],
@@ -300,7 +330,7 @@ def create_drive():
             job_location=data.get("job_location"),
             job_type=data.get("job_type"),
             salary_package=data.get("salary_package"),
-            eligible_branches=data.get("eligible_branches"),
+            eligible_branches=eligible_branches_str,
             min_cgpa=min_cgpa,
             min_year=min_year,
             max_year=max_year,
@@ -330,7 +360,7 @@ def create_drive():
 
 @company_bp.route("/drives", methods=["GET"])
 @company_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_drives():
     _, company = get_current_company()
 
@@ -340,6 +370,8 @@ def get_drives():
         db.session.query(
             PlacementDrive.id,
             PlacementDrive.job_title,
+            PlacementDrive.job_type,
+            PlacementDrive.salary_package,
             PlacementDrive.status,
             PlacementDrive.application_deadline,
             func.count(Application.id).label("applicant_count"),
@@ -379,6 +411,8 @@ def get_drives():
         {
             "id": row.id,
             "job_title": row.job_title,
+            "job_type": row.job_type,
+            "salary_package": row.salary_package,
             "status": row.status,
             "application_deadline": (
                 row.application_deadline.isoformat()
@@ -397,7 +431,7 @@ def get_drives():
 
 @company_bp.route("/drives/<int:drive_id>", methods=["GET"])
 @company_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_drive(drive_id):
     _, company = get_current_company()
     drive = db.get_or_404(PlacementDrive, drive_id)
@@ -488,28 +522,9 @@ def edit_drive(drive_id):
         return error_response("Database error. Please try again.", 500)
 
 
-@company_bp.route("/drives/<int:drive_id>/close", methods=["PATCH"])
-@company_required
-def close_drive(drive_id):
-    _, company = get_current_company()
-    drive = db.get_or_404(PlacementDrive, drive_id)
-
-    if drive.company_id != company.id:
-        return error_response("Access denied", 403)
-
-    drive.status = DriveStatus.CLOSED
-    try:
-        db.session.commit()
-        invalidate_drive_cache()
-        return success_response("Drive closed successfully")
-    except Exception:
-        db.session.rollback()
-        return error_response("Database error. Please try again.", 500)
-
-
 @company_bp.route("/drives/<int:drive_id>/applications", methods=["GET"])
 @company_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_drive_applications(drive_id):
     _, company = get_current_company()
     drive = db.get_or_404(PlacementDrive, drive_id)
@@ -533,6 +548,7 @@ def get_drive_applications(drive_id):
             "application_id": app.id,
             "student_name": app.student.full_name,
             "roll_number": app.student.id,
+            "email": app.student.user.email if app.student.user else None,
             "branch": app.student.branch,
             "cgpa": app.student.cgpa,
             "year": app.student.year,
@@ -584,6 +600,34 @@ def update_application_status(application_id):
     try:
         db.session.commit()
         invalidate_application_cache()
+
+        # Notify the student of the status change
+        status_messages = {
+            ApplicationStatus.SHORTLISTED: (
+                f"You have been shortlisted for {app_record.drive.job_title} "
+                f"at {app_record.drive.company.company_name}."
+            ),
+            ApplicationStatus.SELECTED: (
+                f"Congratulations! You have been selected for "
+                f"{app_record.drive.job_title} at {app_record.drive.company.company_name}."
+            ),
+            ApplicationStatus.REJECTED: (
+                f"Your application for {app_record.drive.job_title} "
+                f"at {app_record.drive.company.company_name} was not successful."
+            ),
+        }
+        notification = Notification(
+            user_id=app_record.student.user_id,
+            title={
+                ApplicationStatus.SHORTLISTED: "Application Shortlisted",
+                ApplicationStatus.SELECTED: "Application Selected",
+                ApplicationStatus.REJECTED: "Application Rejected",
+            }[new_status],
+            message=status_messages[new_status],
+        )
+        db.session.add(notification)
+        db.session.commit()
+
         return success_response("Application status updated successfully")
     except Exception:
         db.session.rollback()
@@ -608,6 +652,7 @@ def update_application_interview(application_id):
         )
 
     data = request.get_json()
+    was_scheduled = app_record.interview_date is not None
 
     try:
         if "interview_date" in data:
@@ -640,6 +685,25 @@ def update_application_interview(application_id):
         return error_response(str(e))
 
     try:
+        title = (
+            "Interview Rescheduled" if was_scheduled else "Interview Scheduled"
+        )
+        action = "rescheduled" if was_scheduled else "scheduled"
+        msg = (
+            f"Your interview for {app_record.drive.job_title} at "
+            f"{app_record.drive.company.company_name} has been {action}."
+        )
+        if app_record.interview_date:
+            msg += f" Date: {app_record.interview_date.strftime('%d %b %Y, %H:%M')} UTC."
+        if app_record.interview_mode:
+            msg += f" Mode: {app_record.interview_mode}."
+        db.session.add(
+            Notification(
+                user_id=app_record.student.user_id,
+                title=title,
+                message=msg,
+            )
+        )
         db.session.commit()
         invalidate_application_cache()
         return success_response("Interview details updated successfully")
@@ -648,12 +712,55 @@ def update_application_interview(application_id):
         return error_response("Database error. Please try again.", 500)
 
 
+@company_bp.route("/students/<int:student_id>", methods=["GET"])
+@company_required
+def get_student(student_id):
+    _, company = get_current_company()
+
+    student = db.get_or_404(Student, student_id)
+
+    # Only expose this student if they have applied to one of this company's drives
+    has_application = (
+        Application.query.join(PlacementDrive)
+        .filter(
+            Application.student_id == student.id,
+            PlacementDrive.company_id == company.id,
+        )
+        .first()
+    )
+
+    if not has_application:
+        return error_response("Access denied", 403)
+
+    return success_response(
+        "Student fetched",
+        {
+            "id": student.id,
+            "name": student.full_name,
+            "full_name": student.full_name,
+            "email": student.user.email if student.user else None,
+            "branch": student.branch,
+            "year": student.year,
+            "cgpa": float(student.cgpa) if student.cgpa is not None else None,
+            "phone": student.phone,
+            "linkedin_url": student.linkedin_url,
+            "github_url": student.github_url,
+            "skills": student.skills,
+            "resume_filename": student.resume_filename,
+            "is_placed": student.is_placed,
+            "account_status": student.user.account_status
+            if student.user
+            else None,
+        },
+    )
+
+
 @company_bp.route(
     "/applications/<int:application_id>/resume",
     methods=["GET"],
 )
 @company_required
-@cache.cached(query_string=True)
+@cache.cached(make_cache_key=make_user_cache_key)
 def get_application_resume(application_id):
     _, company = get_current_company()
     app_record = db.get_or_404(Application, application_id)

@@ -1,15 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import CompanyLayout from '@/layouts/CompanyLayout.vue'
+import StudentLayout from '@/layouts/StudentLayout.vue'
 
 const GuestLayout = {
-  template: '<div style="padding:2rem"><router-view/></div>'
-}
-const CompanyLayout = {
-  template: '<div style="padding:2rem"><h2>Company Layout</h2><router-view/></div>'
-}
-const StudentLayout = {
-  template: '<div style="padding:2rem"><h2>Student Layout</h2><router-view/></div>'
+  template: '<router-view/>'
 }
 
 const PlaceholderView = {
@@ -37,12 +33,12 @@ const router = createRouter({
         {
           path: 'register/student',
           name: 'register-student',
-          component: PlaceholderView
+          component: () => import('@/views/auth/LoginView.vue')
         },
         {
           path: 'register/company',
           name: 'register-company',
-          component: PlaceholderView
+          component: () => import('@/views/auth/LoginView.vue')
         }
       ]
     },
@@ -69,7 +65,7 @@ const router = createRouter({
         {
           path: 'companies/:id',
           name: 'admin-company-detail',
-          component: PlaceholderView
+          component: () => import('@/views/shared/CompanyDetailView.vue')
         },
         {
           path: 'students',
@@ -79,7 +75,7 @@ const router = createRouter({
         {
           path: 'students/:id',
           name: 'admin-student-detail',
-          component: PlaceholderView
+          component: () => import('@/views/shared/StudentProfileView.vue')
         },
         {
           path: 'drives',
@@ -89,17 +85,12 @@ const router = createRouter({
         {
           path: 'drives/:id',
           name: 'admin-drive-detail',
-          component: PlaceholderView
+          component: () => import('@/views/shared/DriveDetailView.vue')
         },
         {
           path: 'applications',
           name: 'admin-applications',
           component: () => import('@/views/admin/ApplicationsView.vue')
-        },
-        {
-          path: 'settings',
-          name: 'admin-settings',
-          component: () => import('@/views/admin/SettingsView.vue')
         }
       ]
     },
@@ -116,32 +107,47 @@ const router = createRouter({
         {
           path: 'dashboard',
           name: 'company-dashboard',
-          component: PlaceholderView
+          component: () => import('@/views/company/DashboardView.vue')
         },
         {
           path: 'profile',
           name: 'company-profile',
-          component: PlaceholderView
+          component: () => import('@/views/shared/CompanyDetailView.vue')
+        },
+        {
+          path: 'profile/edit',
+          name: 'company-profile-edit',
+          component: () => import('@/views/company/ProfileEditView.vue')
         },
         {
           path: 'drives',
           name: 'company-drives',
-          component: PlaceholderView
+          component: () => import('@/views/company/DrivesView.vue')
         },
         {
           path: 'drives/create',
           name: 'company-create-drive',
-          component: PlaceholderView
+          component: () => import('@/views/company/CreateDriveView.vue')
+        },
+        {
+          path: 'drives/:id/edit',
+          name: 'company-drive-edit',
+          component: () => import('@/views/company/CreateDriveView.vue')
         },
         {
           path: 'drives/:id',
           name: 'company-drive-detail',
-          component: PlaceholderView
+          component: () => import('@/views/shared/DriveDetailView.vue')
         },
         {
-          path: 'applications',
-          name: 'company-applications',
-          component: PlaceholderView
+          path: 'drives/:id/applications',
+          name: 'company-drive-applications',
+          component: () => import('@/views/company/DriveApplicationsView.vue')
+        },
+        {
+          path: 'students/:id',
+          name: 'company-student-detail',
+          component: () => import('@/views/shared/StudentProfileView.vue')
         }
       ]
     },
@@ -158,32 +164,32 @@ const router = createRouter({
         {
           path: 'dashboard',
           name: 'student-dashboard',
-          component: PlaceholderView
+          component: () => import('@/views/student/DashboardView.vue')
         },
         {
           path: 'profile',
           name: 'student-profile',
-          component: PlaceholderView
+          component: () => import('@/views/shared/StudentProfileView.vue')
         },
         {
-          path: 'drives',
-          name: 'student-drives',
-          component: PlaceholderView
+          path: 'profile/edit',
+          name: 'student-profile-edit',
+          component: () => import('@/views/student/ProfileEditView.vue')
+        },
+        {
+          path: 'companies/:id',
+          name: 'student-company-detail',
+          component: () => import('@/views/shared/CompanyDetailView.vue')
         },
         {
           path: 'drives/:id',
           name: 'student-drive-detail',
-          component: PlaceholderView
+          component: () => import('@/views/shared/DriveDetailView.vue')
         },
         {
           path: 'applications',
           name: 'student-applications',
-          component: PlaceholderView
-        },
-        {
-          path: 'export',
-          name: 'student-export',
-          component: PlaceholderView
+          component: () => import('@/views/student/ApplicationsView.vue')
         }
       ]
     },
@@ -195,10 +201,15 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const requiresAuth = to.meta.requiresAuth
   const routeRole = to.meta.role
+
+  // Rehydrate auth state from localStorage on hard refresh
+  if (!authStore.token) {
+    authStore.initAuth()
+  }
 
   if (requiresAuth && !authStore.token) {
     next('/login')

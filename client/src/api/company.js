@@ -22,9 +22,11 @@ export const getDrive = (id) => api.get(`/api/company/drives/${id}`)
 
 export const updateDrive = (id, data) => api.put(`/api/company/drives/${id}`, data)
 
-export const closeDrive = (id) => api.patch(`/api/company/drives/${id}/close`)
-
 export const getDriveApplications = (id, params) => api.get(`/api/company/drives/${id}/applications`, { params })
+
+// ── STUDENTS ──
+
+export const getStudent = (id) => api.get(`/api/company/students/${id}`)
 
 // ── APPLICATIONS ──
 
@@ -34,10 +36,3 @@ export const updateApplicationInterview = (id, data) => api.patch(`/api/company/
 
 export const downloadResume = (id, filename) => downloadFile(`/api/company/applications/${id}/resume`, filename)
 
-// ── EXPORT ──
-
-export const triggerExport = () => api.post('/api/company/applications/export')
-
-export const getExportStatus = (jobId) => api.get(`/api/company/applications/export/${jobId}`)
-
-export const downloadExport = (jobId, filename) => downloadFile(`/api/company/applications/export/${jobId}/download`, filename)

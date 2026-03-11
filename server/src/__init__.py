@@ -26,16 +26,23 @@ def create_app():
     cache.init_app(app)
     app.celery = make_celery(app)
 
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(","),
-            "supports_credentials": True
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": os.getenv(
+                    "ALLOWED_ORIGINS", "http://localhost:5173"
+                ).split(","),
+                "supports_credentials": True,
+            },
+            r"/auth/*": {
+                "origins": os.getenv(
+                    "ALLOWED_ORIGINS", "http://localhost:5173"
+                ).split(","),
+                "supports_credentials": True,
+            },
         },
-        r"/auth/*": {
-            "origins": os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(","),
-            "supports_credentials": True
-        }
-    })
+    )
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)

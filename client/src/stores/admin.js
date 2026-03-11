@@ -6,7 +6,6 @@ export const useAdminStore = defineStore('admin', {
     // Dashboard
     stats: null,
     recentPlacements: [],
-    recentActivity: [],
 
     // Companies
     companies: [],
@@ -57,7 +56,6 @@ export const useAdminStore = defineStore('admin', {
         const response = await adminApi.getDashboard()
         this.stats = response.data
         this.recentPlacements = response.data?.recent_placements || []
-        this.recentActivity = response.data?.recent_activity || []
       } catch (e) {
         this.error = e.message
         throw e

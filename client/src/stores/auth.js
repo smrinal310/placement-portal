@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
 import { login as apiLogin, logout as apiLogout } from '../api/auth'
-import { getProfile as getCompanyProfile } from '../api/company'
-import { getProfile as getStudentProfile } from '../api/student'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -42,52 +40,39 @@ export const useAuthStore = defineStore('auth', {
       this.error = null
       localStorage.removeItem('access_token')
     },
-    async initAuth() {
+    initAuth() {
       const token = localStorage.getItem('access_token')
       if (!token) return
 
-      this.token = token
       try {
+        // Decode JWT payload (no API call — avoids 401 race on page reload)
         const payloadBase64 = token.split('.')[1]
         const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/')
-        const payloadJson = atob(base64)
-        const payload = JSON.parse(payloadJson)
+        const payload = JSON.parse(atob(base64))
+
+        // Check expiry before trusting the token
+        if (payload.exp && Date.now() / 1000 > payload.exp) {
+          this.logout()
+          return
+        }
 
         const role = payload.role
         const email = payload.sub || ''
         const id = payload.id
-
         const username = email.split('@')[0]
         const defaultName = username ? username.charAt(0).toUpperCase() + username.slice(1) : ''
 
-        const baseUser = {
+        this.token = token
+        this.user = {
           id,
           email,
           role,
           name: defaultName,
           ...(payload.approval_status && { approval_status: payload.approval_status })
         }
-
-        if (role === 'admin') {
-          this.user = baseUser
-        } else if (role === 'student') {
-          const response = await getStudentProfile()
-          this.user = {
-            ...baseUser,
-            name: response.data?.full_name || baseUser.name
-          }
-        } else if (role === 'company') {
-          const response = await getCompanyProfile()
-          this.user = {
-            ...baseUser,
-            name: response.data?.company_name || baseUser.name,
-            approval_status: payload.approval_status || response.data?.approval_status
-          }
-        } else {
-          this.user = baseUser
-        }
-      } catch (err) {
-        this.logout()
+      } catch {
+        // Malformed token — clear it
+        localStorage.removeItem('access_token')
       }
     }
   }

@@ -2,14 +2,8 @@
     <div class="dashboard">
         <AppSpinner v-if="adminStore.loading && !adminStore.stats" :fullPage="true" />
 
-        <AppEmptyState
-            v-else-if="adminStore.error"
-            icon="bi bi-exclamation-circle"
-            title="Failed to load dashboard"
-            :subtitle="adminStore.error"
-            actionLabel="Retry"
-            @action="adminStore.fetchDashboard()"
-        />
+        <AppEmptyState v-else-if="adminStore.error" icon="bi bi-exclamation-circle" title="Failed to load dashboard"
+            :subtitle="adminStore.error" actionLabel="Retry" @action="adminStore.fetchDashboard()" />
 
         <template v-else>
             <header class="dashboard__header">
@@ -18,20 +12,24 @@
                     <p class="dashboard__subtitle">Welcome back, here's what's happening with placements today.</p>
                 </div>
                 <div class="dashboard__header-actions">
-                    <AppButton variant="outline" iconLeft="bi bi-download" @click="handleExport">Export Report</AppButton>
-                    <AppButton variant="primary" iconLeft="bi bi-plus-lg" @click="router.push('/admin/drives')">New Drive</AppButton>
+                    <AppButton variant="primary" iconLeft="bi bi-download" :loading="exportLoading"
+                        @click="handleExport">Mail Report</AppButton>
                 </div>
             </header>
 
+            <Transition name="banner">
+                <div v-if="exportMsg" class="dashboard__export-banner"
+                    :class="exportMsgError ? 'dashboard__export-banner--error' : 'dashboard__export-banner--success'">
+                    <i :class="exportMsgError ? 'bi bi-exclamation-circle' : 'bi bi-check-circle'"></i>
+                    {{ exportMsg }}
+                </div>
+            </Transition>
+
             <section class="dashboard__stats-grid">
-                <StatCard label="Total Students" :value="adminStore.stats?.total_students ?? 0" trend="+12%"
-                    trendVariant="success" subLabel="vs last month" />
-                <StatCard label="Total Companies" :value="adminStore.stats?.companies?.total ?? 0" trend="+5"
-                    trendVariant="success" subLabel="new this week" />
-                <StatCard label="Active Drives" :value="adminStore.stats?.drives?.approved ?? 0"
-                    subLabel="Updated 2 hours ago" />
-                <StatCard label="Pending Approvals" :value="adminStore.stats?.companies?.pending ?? 0"
-                    actionBadge="Action needed" subLabel="Requires attention" />
+                <StatCard label="Total Students" :value="adminStore.stats?.total_students ?? 0" />
+                <StatCard label="Total Companies" :value="adminStore.stats?.companies?.total ?? 0" />
+                <StatCard label="Active Drives" :value="adminStore.stats?.drives?.approved ?? 0" />
+                <StatCard label="Pending Approvals" :value="adminStore.stats?.companies?.pending ?? 0"/>
             </section>
 
             <section class="dashboard__actions-grid">
@@ -66,35 +64,27 @@
                             </thead>
                             <tbody>
                                 <tr v-for="(placement, index) in adminStore.recentPlacements.slice(0, 5)" :key="index">
-                                    <td>{{ placement.student_name }}</td>
-                                    <td>{{ placement.company_name }}</td>
-                                    <td>{{ placement.job_title }}</td>
-                                    <td class="dashboard__package">{{ placement.salary_package }}</td>
-                                    <td>{{ formatDate(placement.created_at, { style: 'short' }) }}</td>
+                                    <td>
+                                        <div class="dashboard__name-cell">
+                                            <AppAvatar :name="placement.student_name" size="sm" />
+                                            <div>
+                                                <router-link :to="`/admin/students/${placement.student_id}`"
+                                                    class="table-link dashboard__name-link">{{ placement.student_name
+                                                    }}</router-link>
+                                                <div class="dashboard__name-sub">{{ placement.student_branch }}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <router-link :to="`/admin/companies/${placement.company_id}`"
+                                            class="table-link">{{ placement.company_name }}</router-link>
+                                    </td>
+                                    <td>{{ placement.role }}</td>
+                                    <td class="dashboard__package">{{ placement.package }}</td>
+                                    <td>{{ formatDate(placement.date, { style: 'short' }) }}</td>
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
-                </div>
-
-                <div class="card dashboard__activity">
-                    <h2 class="dashboard__card-title dashboard__activity-title">Recent Activity</h2>
-                    <div v-if="adminStore.recentActivity.length" class="dashboard__activity-feed">
-                        <div v-for="(activity, index) in adminStore.recentActivity" :key="index" class="dashboard__activity-item">
-                            <div class="dashboard__activity-row">
-                                <span class="dashboard__activity-actor">{{ activity.actor }}</span>
-                                <span class="dashboard__activity-time">{{ formatDate(activity.timestamp, { style: 'relative' }) }}</span>
-                            </div>
-                            <p class="dashboard__activity-desc">{{ activity.description }}</p>
-                        </div>
-                    </div>
-                    <AppEmptyState
-                        v-else-if="!adminStore.loading"
-                        title="No recent activity"
-                        subtitle="Activity stream will appear here."
-                    />
-                    <div class="dashboard__activity-footer">
-                        <AppButton variant="ghost" @click="router.push('/admin/applications')">View All Activity</AppButton>
                     </div>
                 </div>
             </section>
@@ -103,14 +93,16 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { formatDate } from '@/utils/formatters'
+import { generateReport } from '@/api/admin'
 
 import AppButton from '@/components/common/AppButton.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppAvatar from '@/components/common/AppAvatar.vue'
 import StatCard from '@/components/admin/StatCard.vue'
 import QuickActionCard from '@/components/admin/QuickActionCard.vue'
 
@@ -121,8 +113,27 @@ onMounted(() => {
     adminStore.fetchDashboard()
 })
 
-const handleExport = () => {
-    console.log('TODO: Export Report')
+const exportLoading = ref(false)
+const exportMsg = ref('')
+const exportMsgError = ref(false)
+let exportMsgTimer = null
+
+const handleExport = async () => {
+    if (exportLoading.value) return
+    exportLoading.value = true
+    exportMsg.value = ''
+    try {
+        await generateReport()
+        exportMsgError.value = false
+        exportMsg.value = 'Report is being generated and will be emailed to you shortly.'
+    } catch {
+        exportMsgError.value = true
+        exportMsg.value = 'Failed to trigger report generation.'
+    } finally {
+        exportLoading.value = false
+        clearTimeout(exportMsgTimer)
+        exportMsgTimer = setTimeout(() => { exportMsg.value = '' }, 5000)
+    }
 }
 </script>
 
@@ -159,6 +170,36 @@ const handleExport = () => {
     align-items: center;
 }
 
+.dashboard__export-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--border-radius-md);
+    font-size: var(--font-size-sm);
+}
+
+.dashboard__export-banner--success {
+    background-color: var(--color-success-light, #dcfce7);
+    color: var(--color-success, #16a34a);
+}
+
+.dashboard__export-banner--error {
+    background-color: var(--color-danger-light, #fee2e2);
+    color: var(--color-danger, #dc2626);
+}
+
+.banner-enter-active,
+.banner-leave-active {
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+.banner-enter-from,
+.banner-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+}
+
 .dashboard__stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -173,7 +214,7 @@ const handleExport = () => {
 
 .dashboard__bottom-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr;
     gap: var(--space-4);
     align-items: start;
 }
@@ -194,58 +235,19 @@ const handleExport = () => {
     font-weight: var(--font-weight-bold);
 }
 
-.dashboard__activity {
+.dashboard__name-cell {
     display: flex;
-    flex-direction: column;
-}
-
-.dashboard__activity-title {
-    margin-bottom: var(--space-4);
-}
-
-.dashboard__activity-feed {
-    flex: 1;
-}
-
-.dashboard__activity-item {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-block: var(--space-3);
-    border-bottom: var(--border-width) solid var(--border-color);
-}
-
-.dashboard__activity-item:last-child {
-    border-bottom: none;
-}
-
-.dashboard__activity-row {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: var(--space-2);
 }
 
-.dashboard__activity-actor {
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
+.dashboard__name-link {
+    font-weight: var(--font-weight-medium);
 }
 
-.dashboard__activity-time {
-    color: var(--color-text-muted);
+.dashboard__name-sub {
     font-size: var(--font-size-xs);
-}
-
-.dashboard__activity-desc {
     color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    margin: 0;
-}
-
-.dashboard__activity-footer {
-    margin-top: var(--space-4);
-    display: flex;
-    justify-content: center;
 }
 
 @media (max-width: 991px) {

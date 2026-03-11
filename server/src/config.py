@@ -30,9 +30,10 @@ class Config:
     CELERY_ACCEPT_CONTENT = ["json"]
 
     # --- Flask-Mail ---
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
-    MAIL_USE_TLS = True
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "localhost")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", 1025))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "false").lower() == "true"
+    MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "false").lower() == "true"
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv(

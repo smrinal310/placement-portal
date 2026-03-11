@@ -7,17 +7,14 @@ from ..helpers.utils import error_response
 from ..models import Company, Student, User
 
 
-def role_required(required_role: str):
+def roles_required(*allowed_roles: str):
     def wrapper(fn):
         @wraps(fn)
         def decorator(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
-            if claims.get("role") != required_role:
-                return error_response(
-                    f"{required_role.capitalize()} access required",
-                    403,
-                )
+            if claims.get("role") not in allowed_roles:
+                return error_response("Access required", 403)
             return fn(*args, **kwargs)
 
         return decorator
@@ -25,9 +22,9 @@ def role_required(required_role: str):
     return wrapper
 
 
-admin_required = role_required(UserRole.ADMIN)
-company_required = role_required(UserRole.COMPANY)
-student_required = role_required(UserRole.STUDENT)
+admin_required = roles_required(UserRole.ADMIN)
+company_required = roles_required(UserRole.COMPANY)
+student_required = roles_required(UserRole.STUDENT)
 
 
 def get_current_company() -> tuple[User, Company | None]:

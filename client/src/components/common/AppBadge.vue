@@ -22,6 +22,7 @@ const props = defineProps({
         'shortlisted',
         'applied',
         'closed',
+        'placed',
         'action-needed',
       ].includes(value.toLowerCase()),
   },

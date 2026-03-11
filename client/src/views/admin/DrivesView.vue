@@ -65,7 +65,7 @@
             <tbody>
               <tr v-for="drive in adminStore.drives" :key="drive.id">
                 <td>
-                  <div class="drives__job-title">{{ drive.job_title }}</div>
+                  <div class="drives__job-title table-link" @click="router.push('/admin/drives/' + drive.id)">{{ drive.job_title }}</div>
                   <div class="drives__job-meta">
                     {{ drive.job_type }}<template v-if="drive.salary_package"> • {{ drive.salary_package }}</template>
                   </div>
@@ -73,7 +73,7 @@
                 <td>
                   <div class="drives__company-cell">
                     <AppAvatar :name="drive.company_name" size="sm" />
-                    <span>{{ drive.company_name }}</span>
+                    <span class="table-link" @click="router.push('/admin/companies/' + drive.company_id)">{{ drive.company_name }}</span>
                   </div>
                 </td>
                 <td>
@@ -107,75 +107,38 @@
                 </td>
                 <td>
                   <div class="drives__actions">
-                    <template v-if="drive.status === DriveStatus.PENDING">
-                      <AppButton
-                        variant="approve"
-                        size="sm"
-                        @click="openModal('approve', drive)"
-                      >Approve</AppButton>
+                    <div class="drives__kebab-wrap" :ref="el => setKebabRef(el, drive.id)">
                       <button
                         class="drives__action-btn"
-                        title="View"
-                        @click="router.push('/admin/drives/' + drive.id)"
+                        title="More actions"
+                        @click.stop="toggleKebab(drive.id, $event)"
                       >
-                        <i class="bi bi-eye"></i>
+                        <i class="bi bi-three-dots-vertical"></i>
                       </button>
-                    </template>
-
-                    <template v-else-if="drive.status === DriveStatus.APPROVED">
-                      <button
-                        class="drives__action-btn"
-                        title="View"
-                        @click="router.push('/admin/drives/' + drive.id)"
-                      >
-                        <i class="bi bi-eye"></i>
-                      </button>
-                      <div class="drives__kebab-wrap" :ref="el => setKebabRef(el, drive.id)">
-                        <button
-                          class="drives__action-btn"
-                          title="More actions"
-                          @click.stop="toggleKebab(drive.id)"
-                        >
-                          <i class="bi bi-three-dots-vertical"></i>
+                      <div v-if="openKebabId === drive.id" class="drives__kebab-menu" :style="menuStyle">
+                        <button class="drives__kebab-item" @click="navigateAndClose(drive.id)">
+                          View Details
                         </button>
-                        <div v-if="openKebabId === drive.id" class="drives__kebab-menu">
-                          <button class="drives__kebab-item" @click="navigateAndClose(drive.id)">
-                            View Details
+                        <template v-if="drive.status === DriveStatus.PENDING">
+                          <button class="drives__kebab-item drives__kebab-item--success" @click="openModalAndClose('approve', drive)">
+                            Approve Drive
                           </button>
                           <button class="drives__kebab-item drives__kebab-item--danger" @click="openModalAndClose('reject', drive)">
                             Reject Drive
                           </button>
-                        </div>
+                        </template>
+                        <template v-else-if="drive.status === DriveStatus.APPROVED">
+                          <button class="drives__kebab-item drives__kebab-item--danger" @click="openModalAndClose('reject', drive)">
+                            Reject Drive
+                          </button>
+                        </template>
                       </div>
-                    </template>
-
-                    <template v-else-if="drive.status === DriveStatus.CLOSED">
-                      <button
-                        class="drives__action-btn"
-                        title="View"
-                        @click="router.push('/admin/drives/' + drive.id)"
-                      >
-                        <i class="bi bi-eye"></i>
-                      </button>
-                      <button class="drives__action-btn" title="Schedule">
-                        <i class="bi bi-calendar"></i>
-                      </button>
-                    </template>
+                    </div>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <div class="drives__pagination">
-          <AppPagination
-            variant="numbered"
-            :total="adminStore.drivesTotal"
-            :perPage="10"
-            :currentPage="adminStore.driveFilters.page"
-            @page-change="(page) => adminStore.fetchDrives({ page })"
-          />
         </div>
       </template>
     </div>
@@ -252,7 +215,6 @@ import AppBadge from '@/components/common/AppBadge.vue'
 import AppAvatar from '@/components/common/AppAvatar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import AppPagination from '@/components/common/AppPagination.vue'
 import AppModal from '@/components/common/AppModal.vue'
 import EligibilityTag from '@/components/admin/EligibilityTag.vue'
 import DeadlineCell from '@/components/admin/DeadlineCell.vue'
@@ -264,6 +226,7 @@ const adminStore = useAdminStore()
 const searchQuery = ref('')
 const activeStatusFilter = ref('all')
 const openKebabId = ref(null)
+const menuStyle = ref({})
 const feedbackMessage = ref('')
 const feedbackType = ref('success')
 
@@ -305,8 +268,19 @@ const setKebabRef = (el, id) => {
   else delete kebabRefs[id]
 }
 
-const toggleKebab = (id) => {
-  openKebabId.value = openKebabId.value === id ? null : id
+const toggleKebab = (id, event) => {
+  if (openKebabId.value === id) {
+    openKebabId.value = null
+    return
+  }
+  const rect = event.currentTarget.getBoundingClientRect()
+  const right = window.innerWidth - rect.right
+  if (window.innerHeight - rect.bottom < 150) {
+    menuStyle.value = { bottom: (window.innerHeight - rect.top) + 'px', right: right + 'px', top: 'auto' }
+  } else {
+    menuStyle.value = { top: rect.bottom + 'px', right: right + 'px', bottom: 'auto' }
+  }
+  openKebabId.value = id
 }
 
 const navigateAndClose = (id) => {
@@ -430,11 +404,6 @@ onUnmounted(() => {
   overflow-x: auto;
 }
 
-.drives__pagination {
-  padding: var(--space-4) var(--space-6);
-  border-top: var(--border-width) solid var(--border-color);
-}
-
 .drives__job-title {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
@@ -500,15 +469,13 @@ onUnmounted(() => {
 }
 
 .drives__kebab-menu {
-  position: absolute;
-  right: 0;
-  top: 100%;
+  position: fixed;
   background: var(--color-white);
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-md);
   min-width: 160px;
-  z-index: var(--z-dropdown);
+  z-index: 1000;
 }
 
 .drives__kebab-item {
@@ -532,6 +499,10 @@ onUnmounted(() => {
 
 .drives__kebab-item--danger {
   color: var(--color-danger);
+}
+
+.drives__kebab-item--success {
+  color: var(--color-success);
 }
 
 .drives__modal-summary {

@@ -1,6 +1,18 @@
+from flask import request
 from flask_caching import Cache
+from flask_jwt_extended import get_jwt_identity
 
 cache = Cache()
+
+
+def make_user_cache_key(*args, **kwargs):
+    """
+    Cache key that includes the JWT identity so different
+    users never share cached responses.
+    """
+    identity = get_jwt_identity()
+    qs = request.query_string.decode()
+    return f"view/{identity}{request.path}{'?' + qs if qs else ''}"
 
 
 def invalidate_cache(path_prefixes):
@@ -39,6 +51,7 @@ def invalidate_student_cache():
             "api/admin/dashboard",
             "api/student/profile",
             "api/student/dashboard",
+            "api/student/drives",
         ]
     )
 

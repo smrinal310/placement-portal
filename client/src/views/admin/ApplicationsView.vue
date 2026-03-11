@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { ApplicationStatus } from '@/utils/constants'
@@ -10,7 +10,6 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppSpinner from '@/components/common/AppSpinner.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import AppPagination from '@/components/common/AppPagination.vue'
 import AppModal from '@/components/common/AppModal.vue'
 
 const router = useRouter()
@@ -35,9 +34,31 @@ const searchQuery = ref('')
 const selectedDriveId = ref('')
 const selectedCompanyId = ref('')
 const selectedStatus = ref('')
-const exportLoading = ref(false)
 const feedbackMessage = ref('')
 const feedbackType = ref('success')
+
+const openKebabId = ref(null)
+const kebabRefs = {}
+
+const setKebabRef = (el, id) => {
+  if (el) kebabRefs[id] = el
+  else delete kebabRefs[id]
+}
+
+const toggleKebab = (id) => {
+  openKebabId.value = openKebabId.value === id ? null : id
+}
+
+const openModalAndClose = (app) => {
+  openKebabId.value = null
+  openModal(app)
+}
+
+const handleOutsideClick = (e) => {
+  if (openKebabId.value === null) return
+  const el = kebabRefs[openKebabId.value]
+  if (el && !el.contains(e.target)) openKebabId.value = null
+}
 
 function applyFilters() {
   adminStore.fetchApplications({
@@ -52,18 +73,11 @@ function applyFilters() {
 watch([searchQuery, selectedDriveId, selectedCompanyId, selectedStatus], applyFilters)
 
 function handleViewStudent(app) {
-  if (app.student_id) {
-    router.push('/admin/students/' + app.student_id)
+  const studentId = app?.student_id
+  closeModal()
+  if (studentId) {
+    router.push('/admin/students/' + studentId)
   }
-}
-
-function handleExport() {
-  exportLoading.value = true
-  console.log('TODO: implement export once /api/admin/applications/export endpoint exists')
-  setTimeout(() => {
-    exportLoading.value = false
-    showFeedback('Export started. Check your downloads.', 'success')
-  }, 1000)
 }
 
 function showFeedback(message, type = 'success') {
@@ -76,6 +90,11 @@ onMounted(() => {
   adminStore.fetchApplications()
   adminStore.fetchDriveOptions()
   adminStore.fetchCompanyOptions()
+  document.addEventListener('click', handleOutsideClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleOutsideClick)
 })
 </script>
 
@@ -92,9 +111,6 @@ onMounted(() => {
         <h1 class="applications__title">All Applications</h1>
         <p class="applications__subtitle">Read-only view of all student applications across placement drives.</p>
       </div>
-      <AppButton variant="outline" :loading="exportLoading" @click="handleExport">
-        <i class="bi bi-download"></i> Export to CSV
-      </AppButton>
     </div>
 
     <AppFilterBar v-model="searchQuery" placeholder="Search by student, drive, company...">
@@ -145,7 +161,6 @@ onMounted(() => {
                 <th class="applications__th">Drive</th>
                 <th class="applications__th">Applied On</th>
                 <th class="applications__th">Status</th>
-                <th class="applications__th">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +169,7 @@ onMounted(() => {
                   <div class="applications__student-cell">
                     <AppAvatar :name="app.student_name" size="sm" />
                     <div class="applications__student-info">
-                      <span class="applications__student-name">{{ app.student_name }}</span>
+                      <span class="applications__student-name table-link" @click="router.push('/admin/students/' + app.student_id)">{{ app.student_name }}</span>
                       <span class="applications__student-meta">
                         {{ app.student_branch }} &bull; {{ app.student_year }} Batch
                       </span>
@@ -164,32 +179,17 @@ onMounted(() => {
                 <td class="applications__td">
                   <div class="applications__company-cell">
                     <i class="bi bi-buildings applications__company-icon"></i>
-                    <span>{{ app.company_name }}</span>
+                    <span class="table-link" @click="router.push('/admin/companies/' + app.company_id)">{{ app.company_name }}</span>
                   </div>
                 </td>
-                <td class="applications__td">{{ app.drive_title }}</td>
+                <td class="applications__td"><span class="table-link" @click="router.push('/admin/drives/' + app.drive_id)">{{ app.drive_title }}</span></td>
                 <td class="applications__td">{{ formatDate(app.applied_at, { style: 'short' }) }}</td>
                 <td class="applications__td">
                   <AppBadge :status="app.status" />
                 </td>
-                <td class="applications__td">
-                  <button class="applications__action-btn" @click="openModal(app)" title="View application">
-                    <i class="bi bi-eye"></i>
-                  </button>
-                </td>
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <div class="applications__pagination">
-          <AppPagination
-            variant="text"
-            :total="adminStore.applicationsTotal"
-            :perPage="10"
-            :currentPage="adminStore.applicationFilters.page"
-            @page-change="(page) => adminStore.fetchApplications({ page })"
-          />
         </div>
       </template>
     </div>
@@ -201,7 +201,7 @@ onMounted(() => {
       confirmLabel="View Student Profile"
       confirmVariant="primary"
       :loading="false"
-      @confirm="handleViewStudent(modalState.app); closeModal()"
+      @confirm="handleViewStudent(modalState.app)"
       @cancel="closeModal"
     >
       <div class="applications__modal-body">
@@ -402,9 +402,40 @@ onMounted(() => {
   background-color: var(--color-surface-hover);
 }
 
-.applications__pagination {
-  padding: var(--space-4) var(--space-4) var(--space-2);
-  border-top: var(--border-width) solid var(--border-color);
+.applications__kebab-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.applications__kebab-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 160px;
+  z-index: var(--z-dropdown);
+}
+
+.applications__kebab-item {
+  display: block;
+  width: 100%;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast);
+  outline: none;
+}
+
+.applications__kebab-item:hover {
+  background: var(--color-gray-50);
 }
 
 .applications__modal-body {
